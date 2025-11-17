@@ -7,6 +7,7 @@ import com.innowise.orderservice.model.Order;
 import com.innowise.orderservice.model.OrderStatus;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
+    List<Order> findAllByIdIn(List<Long> ids);
 
-      List<Order> findAllByStatusIn(List<OrderStatus> statuses);
+    List<Order> findAllByStatusIn(List<OrderStatus> statuses);
 }

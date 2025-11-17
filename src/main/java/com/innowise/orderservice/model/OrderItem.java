@@ -28,11 +28,11 @@ public class OrderItem {
 
     @ManyToOne
     @JoinColumn(name = "order_id", nullable = false)
-    private Order orderId;
+    private Order order;
 
     @ManyToOne
     @JoinColumn(name = "item_id", nullable = false)
-    private Item itemId;
+    private Item item;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal quantity;
