@@ -36,3 +36,10 @@ databaseChangeLog:
             columns:
               - column:
                   name: user_id
+
+        - createIndex:
+            tableName: orders
+            indexName: idx_orders_status
+            columns:
+              - column:
+                  name: status
