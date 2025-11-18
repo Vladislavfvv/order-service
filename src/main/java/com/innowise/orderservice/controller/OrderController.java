@@ -5,6 +5,8 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -106,25 +108,58 @@ public class OrderController {
      * В реальном приложении нужно получить из JWT токена
      */
     private Long getUserIdFromAuthentication(Authentication authentication) {
-        // TODO: Реализовать получение userId из JWT токена
-        // Пока используем заглушку
-        if (authentication.getPrincipal() instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
-            // Попытка получить userId из токена
-            Object userIdObj = jwt.getClaim("userId");
-            if (userIdObj instanceof Number) {
-                return ((Number) userIdObj).longValue();
-            }
+        Jwt jwt = extractJwt(authentication);
+        if (jwt == null) {
+            throw new IllegalStateException("JWT token is required to extract userId");
         }
-        // Заглушка - в реальном приложении нужно правильно извлекать
-        return 1L;
+
+        Object userIdClaim = jwt.getClaims().get("userId");
+        if (userIdClaim == null) {
+            userIdClaim = jwt.getClaims().get("user_id");
+        }
+        if (userIdClaim == null) {
+            userIdClaim = jwt.getSubject();
+        }
+
+        Long userId = convertClaimToLong(userIdClaim);
+        if (userId == null) {
+            throw new IllegalStateException("Cannot extract userId from JWT claims");
+        }
+        return userId;
     }
 
     /**
      * Извлекает токен из Authentication для передачи в User Service
      */
     private String getAuthToken(Authentication authentication) {
-        // TODO: Реализовать извлечение токена из Authentication
-        // Пока возвращаем null - в реальном приложении нужно извлечь из SecurityContext
+        Jwt jwt = extractJwt(authentication);
+        if (jwt == null) {
+            throw new IllegalStateException("JWT token is required to propagate Authorization header");
+        }
+        return "Bearer " + jwt.getTokenValue();
+    }
+
+    private Jwt extractJwt(Authentication authentication) {
+        if (authentication instanceof JwtAuthenticationToken jwtAuthenticationToken) {
+            return jwtAuthenticationToken.getToken();
+        }
+        if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
+            return jwt;
+        }
+        return null;
+    }
+
+    private Long convertClaimToLong(Object claimValue) {
+        if (claimValue instanceof Number number) {
+            return number.longValue();
+        }
+        if (claimValue instanceof String stringValue) {
+            try {
+                return Long.parseLong(stringValue);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
         return null;
     }
 }

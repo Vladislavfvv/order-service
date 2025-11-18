@@ -2,6 +2,7 @@ package com.innowise.orderservice.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -51,6 +52,7 @@ public class OrderService {
                             .orElseThrow(() -> new ItemNotFoundException("Item not found: " + itemDto.getItemId()));
 
                     OrderItem orderItem = new OrderItem();
+                    orderItem.setOrder(order);
                     orderItem.setItem(item);
                     orderItem.setQuantity(itemDto.getQuantity());
                     return orderItem;
@@ -63,7 +65,8 @@ public class OrderService {
         final Order savedOrder = orderRepository.save(order);
 
         // Получаем информацию о пользователе
-        UserDto user = getUserInfo(userId, authToken);
+        long orderOwnerId = Objects.requireNonNull(savedOrder.getUserId(), "Order userId cannot be null");
+        UserDto user = getUserInfo(orderOwnerId, authToken);
 
         OrderDto orderDto = orderMapper.toDto(savedOrder);
         return new OrderWithUserDto(orderDto, user);
@@ -76,7 +79,8 @@ public class OrderService {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
 
-        UserDto user = getUserInfo(order.getUserId(), authToken);
+        long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
+        UserDto user = getUserInfo(orderOwnerId, authToken);
 
         OrderDto orderDto = orderMapper.toDto(order);
         return new OrderWithUserDto(orderDto, user);
@@ -90,7 +94,8 @@ public class OrderService {
         
         return orders.stream()
                 .map(order -> {
-                    UserDto user = getUserInfo(order.getUserId(), authToken);
+                    long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
+                    UserDto user = getUserInfo(orderOwnerId, authToken);
                     OrderDto orderDto = orderMapper.toDto(order);
                     return new OrderWithUserDto(orderDto, user);
                 })
@@ -105,7 +110,8 @@ public class OrderService {
         
         return orders.stream()
                 .map(order -> {
-                    UserDto user = getUserInfo(order.getUserId(), authToken);
+                    long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
+                    UserDto user = getUserInfo(orderOwnerId, authToken);
                     OrderDto orderDto = orderMapper.toDto(order);
                     return new OrderWithUserDto(orderDto, user);
                 })
@@ -122,7 +128,8 @@ public class OrderService {
         order.setStatus(request.getStatus());
         final Order savedOrder = orderRepository.save(order);
 
-        UserDto user = getUserInfo(savedOrder.getUserId(), authToken);
+        long orderOwnerId = Objects.requireNonNull(savedOrder.getUserId(), "Order userId cannot be null");
+        UserDto user = getUserInfo(orderOwnerId, authToken);
 
         OrderDto orderDto = orderMapper.toDto(savedOrder);
         return new OrderWithUserDto(orderDto, user);
@@ -143,17 +150,11 @@ public class OrderService {
      * Получает информацию о пользователе по userId
      * В реальном приложении нужно получить email из токена или из другого источника
      */
-    private UserDto getUserInfo(Long userId, String authToken) {
+    private UserDto getUserInfo(long userId, String authToken) {
         try {
-            // TODO: Получить email пользователя по userId
-            // Пока используем заглушку - в реальном приложении нужно получить email из токена
-            // или из другого источника данных
-            String email = "user@example.com"; // Заглушка
-            
-            return userServiceClient.getUserByEmail(email, authToken);
+            return userServiceClient.getUserById(userId, authToken);
         } catch (Exception e) {
             log.warn("Failed to get user info for userId: {}, using fallback", userId, e);
-            // Возвращаем fallback из Circuit Breaker
             return new UserDto(userId, "Unknown", "User", null, null);
         }
     }

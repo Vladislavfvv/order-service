@@ -1,5 +1,7 @@
 package com.innowise.orderservice.client;
 
+import java.util.Objects;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -21,39 +23,46 @@ public class UserServiceClient {
     @Value("${user.service.url:http://user-service:8080}")
     private String userServiceUrl;
 
-    @Value("${user.service.api-key:}")
-    private String apiKey;
-
-    @CircuitBreaker(name = "userService", fallbackMethod = "getUserByEmailFallback")
-    public UserDto getUserByEmail(String email, String authToken) {
+    @CircuitBreaker(name = "userService", fallbackMethod = "getUserByIdFallback")
+    public UserDto getUserById(long userId, String authToken) {
         try {
-            WebClient webClient = webClientBuilder.baseUrl(userServiceUrl).build();
-            
+            String baseUrl = Objects.requireNonNullElse(userServiceUrl, "http://user-service:8080");
+            WebClient webClient = webClientBuilder.baseUrl(baseUrl).build();
+
             return webClient.get()
                     .uri(uriBuilder -> uriBuilder
-                            .path("/api/users/email")
-                            .queryParam("email", email)
+                            // Используем REST API user-service (версия v1) для получения пользователя по id
+                            .path("/api/v1/users/id")
+                            .queryParam("id", userId)
                             .build())
-                    .header("Authorization", authToken != null ? authToken : "Bearer ")
+                    // Прокидываем исходный Authorization заголовок, чтобы user-service мог валидировать токен
+                    .header("Authorization", buildAuthorizationHeader(authToken))
                     .retrieve()
                     .bodyToMono(UserDto.class)
                     .block();
         } catch (WebClientResponseException e) {
-            log.error("Error calling User Service for email {}: {}", email, e.getMessage());
-            throw new UserServiceException("Failed to get user by email: " + email, e);
+            log.error("Error calling User Service for userId {}: {}", userId, e.getMessage());
+            throw new UserServiceException("Failed to get user by id: " + userId, e);
         } catch (Exception e) {
-            log.error("Unexpected error calling User Service for email {}: {}", email, e.getMessage());
-            throw new UserServiceException("Unexpected error getting user by email: " + email, e);
+            log.error("Unexpected error calling User Service for userId {}: {}", userId, e.getMessage());
+            throw new UserServiceException("Unexpected error getting user by id: " + userId, e);
         }
     }
 
     /**
      * Fallback method вызывается когда Circuit Breaker открыт или произошла ошибка
      */
-    public UserDto getUserByEmailFallback(String email, String authToken, Exception e) {
-        log.warn("Circuit Breaker opened or error occurred. Returning fallback for email: {}", email);
+    public UserDto getUserByIdFallback(long userId, String authToken, Throwable e) {
+        log.warn("Circuit Breaker opened or error occurred. Returning fallback for userId: {}", userId, e);
         // Возвращаем минимальную информацию о пользователе
-        return new UserDto(null, "Unknown", "User", null, email);
+        return new UserDto(userId, "Unknown", "User", null, null);
+    }
+
+    private String buildAuthorizationHeader(String authToken) {
+        if (authToken == null || authToken.isBlank()) {
+            return "";
+        }
+        return authToken.startsWith("Bearer") ? authToken : "Bearer " + authToken;
     }
 
     public static class UserServiceException extends RuntimeException {
