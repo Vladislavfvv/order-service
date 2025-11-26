@@ -29,7 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/orders")
+@RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
 public class OrderController {
 
@@ -39,13 +39,12 @@ public class OrderController {
     public ResponseEntity<OrderWithUserDto> createOrder(
             @Valid @RequestBody CreateOrderRequest request,
             Authentication authentication) {
+
         log.info("Creating order for user: {}", authentication.getName());
         
-        // Получаем userId из токена (предполагается, что в токене есть userId)
-        Long userId = getUserIdFromAuthentication(authentication);
-        String authToken = getAuthToken(authentication);
-        
-        OrderWithUserDto order = orderService.createOrder(userId, request, authToken);
+        // Передаем только Authentication - сервис сам извлечет email и токен из него
+        // Сервис получит userId через UserServiceClient
+        OrderWithUserDto order = orderService.createOrder(request, authentication);
         return ResponseEntity.status(HttpStatus.CREATED).body(order);
     }
 
@@ -104,31 +103,6 @@ public class OrderController {
     }
 
     /**
-     * Извлекает userId из Authentication объекта
-     * В реальном приложении нужно получить из JWT токена
-     */
-    private Long getUserIdFromAuthentication(Authentication authentication) {
-        Jwt jwt = extractJwt(authentication);
-        if (jwt == null) {
-            throw new IllegalStateException("JWT token is required to extract userId");
-        }
-
-        Object userIdClaim = jwt.getClaims().get("userId");
-        if (userIdClaim == null) {
-            userIdClaim = jwt.getClaims().get("user_id");
-        }
-        if (userIdClaim == null) {
-            userIdClaim = jwt.getSubject();
-        }
-
-        Long userId = convertClaimToLong(userIdClaim);
-        if (userId == null) {
-            throw new IllegalStateException("Cannot extract userId from JWT claims");
-        }
-        return userId;
-    }
-
-    /**
      * Извлекает токен из Authentication для передачи в User Service
      */
     private String getAuthToken(Authentication authentication) {
@@ -145,20 +119,6 @@ public class OrderController {
         }
         if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
             return jwt;
-        }
-        return null;
-    }
-
-    private Long convertClaimToLong(Object claimValue) {
-        if (claimValue instanceof Number number) {
-            return number.longValue();
-        }
-        if (claimValue instanceof String stringValue) {
-            try {
-                return Long.parseLong(stringValue);
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
         }
         return null;
     }

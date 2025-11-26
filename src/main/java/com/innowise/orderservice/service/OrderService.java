@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +15,9 @@ import com.innowise.orderservice.dto.OrderDto;
 import com.innowise.orderservice.dto.OrderWithUserDto;
 import com.innowise.orderservice.dto.UpdateOrderRequest;
 import com.innowise.orderservice.dto.UserDto;
+import com.innowise.orderservice.exception.ItemNotFoundException;
+import com.innowise.orderservice.exception.OrderNotFoundException;
+import com.innowise.orderservice.mapper.OrderItemMapper;
 import com.innowise.orderservice.mapper.OrderMapper;
 import com.innowise.orderservice.model.Item;
 import com.innowise.orderservice.model.Order;
@@ -21,6 +25,7 @@ import com.innowise.orderservice.model.OrderItem;
 import com.innowise.orderservice.model.OrderStatus;
 import com.innowise.orderservice.repository.ItemRepository;
 import com.innowise.orderservice.repository.OrderRepository;
+import com.innowise.orderservice.util.SecurityUtils;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,11 +38,27 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ItemRepository itemRepository;
     private final OrderMapper orderMapper;
+    private final OrderItemMapper orderItemMapper;
     private final UserServiceClient userServiceClient;
 
     @Transactional
-    public OrderWithUserDto createOrder(Long userId, CreateOrderRequest request, String authToken) {
-        log.info("Creating order for user ID: {}", userId);
+    public OrderWithUserDto createOrder(CreateOrderRequest request, Authentication authentication) {
+        // Шаг 1: Извлекаем email из Authentication объекта (из JWT токена)
+        String email = SecurityUtils.getEmailFromToken(authentication);
+        log.info("Creating order for user email: {}", email);
+
+        // Шаг 2: Извлекаем токен для передачи в User Service
+        String authToken = SecurityUtils.getTokenString(authentication);
+
+        // Шаг 3: Получаем информацию о пользователе из user-service по email
+        // Это необходимо, чтобы получить userId, который нужен для создания заказа
+        UserDto user = getUserInfoByEmail(email, authToken);
+        Long userId = user.getId();
+        if (userId == null) {
+            throw new IllegalStateException("User ID not found for email: " + email);
+        }
+
+        // Шаг 4: userId теперь известен, можно создавать заказ
 
         // Создаем заказ
         Order order = new Order();
@@ -64,10 +85,7 @@ public class OrderService {
         // Сохраняем заказ (cascade сохранит orderItems)
         final Order savedOrder = orderRepository.save(order);
 
-        // Получаем информацию о пользователе
-        long orderOwnerId = Objects.requireNonNull(savedOrder.getUserId(), "Order userId cannot be null");
-        UserDto user = getUserInfo(orderOwnerId, authToken);
-
+        // Возвращаем заказ с информацией о пользователе (уже полученной выше)
         OrderDto orderDto = orderMapper.toDto(savedOrder);
         return new OrderWithUserDto(orderDto, user);
     }
@@ -79,8 +97,14 @@ public class OrderService {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
 
+        // Получаем email владельца заказа через userId, затем используем email для получения user info
         long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
-        UserDto user = getUserInfo(orderOwnerId, authToken);
+        UserDto tempUser = getUserInfo(orderOwnerId, authToken);
+        String email = tempUser.getEmail();
+        if (email == null || email.isBlank()) {
+            throw new IllegalStateException("Email not found for userId: " + orderOwnerId);
+        }
+        UserDto user = getUserInfoByEmail(email, authToken);
 
         OrderDto orderDto = orderMapper.toDto(order);
         return new OrderWithUserDto(orderDto, user);
@@ -94,8 +118,17 @@ public class OrderService {
         
         return orders.stream()
                 .map(order -> {
+                    // Получаем email владельца заказа через userId, затем используем email для получения user info
                     long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
-                    UserDto user = getUserInfo(orderOwnerId, authToken);
+                    UserDto tempUser = getUserInfo(orderOwnerId, authToken);
+                    String email = tempUser.getEmail();
+                    UserDto user;
+                    if (email == null || email.isBlank()) {
+                        log.warn("Email not found for userId: {}, using tempUser directly", orderOwnerId);
+                        user = tempUser;
+                    } else {
+                        user = getUserInfoByEmail(email, authToken);
+                    }
                     OrderDto orderDto = orderMapper.toDto(order);
                     return new OrderWithUserDto(orderDto, user);
                 })
@@ -110,8 +143,17 @@ public class OrderService {
         
         return orders.stream()
                 .map(order -> {
+                    // Получаем email владельца заказа через userId, затем используем email для получения user info
                     long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
-                    UserDto user = getUserInfo(orderOwnerId, authToken);
+                    UserDto tempUser = getUserInfo(orderOwnerId, authToken);
+                    String email = tempUser.getEmail();
+                    UserDto user;
+                    if (email == null || email.isBlank()) {
+                        log.warn("Email not found for userId: {}, using tempUser directly", orderOwnerId);
+                        user = tempUser;
+                    } else {
+                        user = getUserInfoByEmail(email, authToken);
+                    }
                     OrderDto orderDto = orderMapper.toDto(order);
                     return new OrderWithUserDto(orderDto, user);
                 })
@@ -128,8 +170,14 @@ public class OrderService {
         order.setStatus(request.getStatus());
         final Order savedOrder = orderRepository.save(order);
 
+        // Получаем email владельца заказа через userId, затем используем email для получения user info
         long orderOwnerId = Objects.requireNonNull(savedOrder.getUserId(), "Order userId cannot be null");
-        UserDto user = getUserInfo(orderOwnerId, authToken);
+        UserDto tempUser = getUserInfo(orderOwnerId, authToken);
+        String email = tempUser.getEmail();
+        if (email == null || email.isBlank()) {
+            throw new IllegalStateException("Email not found for userId: " + orderOwnerId);
+        }
+        UserDto user = getUserInfoByEmail(email, authToken);
 
         OrderDto orderDto = orderMapper.toDto(savedOrder);
         return new OrderWithUserDto(orderDto, user);
@@ -148,7 +196,6 @@ public class OrderService {
 
     /**
      * Получает информацию о пользователе по userId
-     * В реальном приложении нужно получить email из токена или из другого источника
      */
     private UserDto getUserInfo(long userId, String authToken) {
         try {
@@ -159,16 +206,15 @@ public class OrderService {
         }
     }
 
-    // Exception classes
-    public static class OrderNotFoundException extends RuntimeException {
-        public OrderNotFoundException(String message) {
-            super(message);
-        }
-    }
-
-    public static class ItemNotFoundException extends RuntimeException {
-        public ItemNotFoundException(String message) {
-            super(message);
+    /**
+     * Получает информацию о пользователе по email
+     */
+    private UserDto getUserInfoByEmail(String email, String authToken) {
+        try {
+            return userServiceClient.getUserByEmail(email, authToken);
+        } catch (Exception e) {
+            log.warn("Failed to get user info for email: {}, using fallback", email, e);
+            return new UserDto(null, "Unknown", "User", null, email);
         }
     }
 }
