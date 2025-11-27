@@ -8,7 +8,7 @@ databaseChangeLog:
             columns:
               - column:
                   name: id
-                  type: bigint auto_increment
+                  type: bigserial
                   constraints:
                     primaryKey: true
 

@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import jakarta.validation.constraints.NotNull;
+
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -98,6 +100,11 @@ public class OrderService {
                 .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
 
         // Получаем email владельца заказа через userId, затем используем email для получения user info
+        return getOrderWithUserDto(authToken, order);
+    }
+
+    @NotNull
+    private OrderWithUserDto getOrderWithUserDto(String authToken, Order order) {
         long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
         UserDto tempUser = getUserInfo(orderOwnerId, authToken);
         String email = tempUser.getEmail();
@@ -171,16 +178,7 @@ public class OrderService {
         final Order savedOrder = orderRepository.save(order);
 
         // Получаем email владельца заказа через userId, затем используем email для получения user info
-        long orderOwnerId = Objects.requireNonNull(savedOrder.getUserId(), "Order userId cannot be null");
-        UserDto tempUser = getUserInfo(orderOwnerId, authToken);
-        String email = tempUser.getEmail();
-        if (email == null || email.isBlank()) {
-            throw new IllegalStateException("Email not found for userId: " + orderOwnerId);
-        }
-        UserDto user = getUserInfoByEmail(email, authToken);
-
-        OrderDto orderDto = orderMapper.toDto(savedOrder);
-        return new OrderWithUserDto(orderDto, user);
+        return getOrderWithUserDto(authToken, savedOrder);
     }
 
     @Transactional

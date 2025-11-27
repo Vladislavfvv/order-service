@@ -8,7 +8,7 @@ databaseChangeLog:
             columns:
               - column:
                   name: id
-                  type: BIGINT AUTO_INCREMENT
+                  type: BIGSERIAL
                   constraints:
                     primaryKey: true
 
@@ -26,7 +26,7 @@ databaseChangeLog:
 
               - column:
                   name: creation_date
-                  type: DATETIME
+                  type: TIMESTAMP
                   constraints:
                     nullable: false
 
