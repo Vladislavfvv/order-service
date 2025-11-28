@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // ================= Validation & Bad Request =================
+    //  Validation & Bad Request 
     @ExceptionHandler(InvalidRequestException.class)
     public ResponseEntity<ErrorResponse> handleInvalidRequest(InvalidRequestException ex) {
         return buildErrorResponse("BAD_REQUEST", ex.getMessage(), HttpStatus.BAD_REQUEST);
@@ -40,6 +40,16 @@ public class GlobalExceptionHandler {
         return buildErrorResponse("RESOURCE_NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
     }
 
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleOrderNotFound(OrderNotFoundException ex) {
+        return buildErrorResponse("ORDER_NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(ItemNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleItemNotFound(ItemNotFoundException ex) {
+        return buildErrorResponse("ITEM_NOT_FOUND", ex.getMessage(), HttpStatus.NOT_FOUND);
+    }
+
     // ================= Access Denied =================
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
@@ -54,6 +64,12 @@ public class GlobalExceptionHandler {
             return buildErrorResponse("ACCESS_DENIED", "Access denied: You can only update your own information.", HttpStatus.FORBIDDEN);
         }
         return buildErrorResponse("BAD_REQUEST", message != null ? message : "Illegal state", HttpStatus.BAD_REQUEST);
+    }
+
+    // ================= External Service Errors =================
+    @ExceptionHandler(UserServiceException.class)
+    public ResponseEntity<ErrorResponse> handleUserServiceException(UserServiceException ex) {
+        return buildErrorResponse("USER_SERVICE_ERROR", ex.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     // ================= Fallback =================

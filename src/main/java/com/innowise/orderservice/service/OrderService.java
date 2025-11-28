@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 
 import jakarta.validation.constraints.NotNull;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -181,20 +182,32 @@ public class OrderService {
         return getOrderWithUserDto(authToken, savedOrder);
     }
 
+    /**
+     * Удаляет заказ по ID.
+     * Доступ разрешен только пользователям с ролью ADMIN.     
+     */
     @Transactional
-    public void deleteOrder(Long id) {
-        log.info("Deleting order ID: {}", id);
+    public void deleteOrder(Long id, Authentication authentication) {
+        log.info("Deleting order ID: {} by user: {}", id, authentication != null ? authentication.getName() : "unknown");
 
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
 
-        // Cascade удалит orderItems автоматически
+        // Проверяем, является ли пользователь ADMIN
+        // Дополнительная проверка на уровне сервиса для безопасности (defense in depth)
+        // Основная проверка уже выполнена в SecurityConfig, но это обеспечивает дополнительную защиту
+        if (authentication == null || !SecurityUtils.isAdmin(authentication)) {
+            String userName = authentication != null ? authentication.getName() : "unknown";
+            log.warn("User {} attempted to delete order {} but is not ADMIN", userName, id);
+            throw new AccessDeniedException("Access denied: Only ADMIN users can delete orders");
+        }
+
+        // Cascade удалит orderItems автоматически благодаря настройкам JPA
         orderRepository.delete(order);
+        log.info("Order {} successfully deleted by ADMIN user: {}", id, authentication.getName());
     }
 
-    /**
-     * Получает информацию о пользователе по userId
-     */
+   
     private UserDto getUserInfo(long userId, String authToken) {
         try {
             return userServiceClient.getUserById(userId, authToken);
@@ -204,9 +217,7 @@ public class OrderService {
         }
     }
 
-    /**
-     * Получает информацию о пользователе по email
-     */
+    
     private UserDto getUserInfoByEmail(String email, String authToken) {
         try {
             return userServiceClient.getUserByEmail(email, authToken);

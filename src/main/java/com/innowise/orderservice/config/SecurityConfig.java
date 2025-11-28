@@ -32,11 +32,12 @@ public class SecurityConfig {
      * Настраивает Security Filter Chain для работы с JWT токенами.
      * 
      * Правила доступа:
-     * - ADMIN: доступ ко всем эндпоинтам
-     * - USER: доступ только к своим ресурсам (проверка в контроллерах)
+     * - ADMIN: доступ ко всем эндпоинтам, включая удаление заказов
+     * - USER: доступ только к своим ресурсам (проверка в контроллерах), НЕ может удалять заказы
      * - Публичные эндпоинты: /actuator/health, /actuator/info
      */
     @Bean
+    @org.springframework.core.annotation.Order(2) // Низкий приоритет, чтобы тестовая конфигурация могла переопределить
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
@@ -49,13 +50,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/cache/**").hasRole("ADMIN")
                         
                         // Эндпоинты для получения списка всех заказов - только ADMIN
-                        .requestMatchers(HttpMethod.GET, "/api/v1/orders").hasRole("ADMIN")
-                        
-//                        // Эндпоинты для создания заказов - только ADMIN
-//                        .requestMatchers(HttpMethod.POST, "/api/v1/orders").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/orders").hasRole("ADMIN")     
                         
                         // Эндпоинт для создания заказов из токена - требует аутентификации
                         .requestMatchers(HttpMethod.POST, "/api/v1/orders").hasAnyRole("ADMIN", "USER")
+                        
+                        // Эндпоинт для удаления заказов - только ADMIN(USER не может удалять заказы - получит 403 Forbidden)
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/orders/**").hasRole("ADMIN")
                         
                         // Остальные эндпоинты требуют аутентификации (проверка доступа в контроллерах)
                         .requestMatchers("/api/v1/orders/**", "/api/v1/orders/ids", "/api/v1/orders/statuses").hasAnyRole("ADMIN", "USER")

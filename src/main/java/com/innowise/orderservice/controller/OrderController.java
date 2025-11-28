@@ -94,11 +94,13 @@ public class OrderController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteOrder(@PathVariable Long id) {
-        log.info("Deleting order ID: {}", id);
+    public ResponseEntity<Void> deleteOrder(
+            @PathVariable Long id,
+            Authentication authentication) {
+        log.info("Deleting order ID: {} by user: {}", id, authentication.getName());
         
-        // Delete не возвращает user info согласно требованиям
-        orderService.deleteOrder(id);
+        // Проверка прав доступа выполняется в SecurityConfig (только ADMIN) и в OrderService
+        orderService.deleteOrder(id, authentication);
         return ResponseEntity.noContent().build();
     }
 
