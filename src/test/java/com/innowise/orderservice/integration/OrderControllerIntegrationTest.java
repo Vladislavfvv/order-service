@@ -44,9 +44,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Используют реальную PostgreSQL БД через Testcontainers и MockMvc для тестирования REST API.
  * Мокируют только внешние сервисы (UserServiceClient).
  * 
- * ВАЖНО: Используем TestSecurityConfig для упрощения тестов, исключая реальную конфигурацию безопасности.
+ * ВАЖНО: Используем TestSecurityConfig для упрощения тестов.
+ * SecurityConfig не загружается благодаря @Profile("!test").
  */
 @AutoConfigureMockMvc
+@org.springframework.boot.test.context.SpringBootTest
 @org.springframework.context.annotation.Import(com.innowise.orderservice.security.TestSecurityConfig.class) // Используем TestSecurityConfig для упрощения тестов
 class OrderControllerIntegrationTest extends BaseIntegrationTest {
 

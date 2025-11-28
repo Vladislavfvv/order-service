@@ -13,12 +13,14 @@ import org.springframework.security.web.SecurityFilterChain;
  * Отключает проверку безопасности, чтобы упростить тестирование REST API.
  * ВАЖНО: Это используется только для интеграционных тестов контроллера,
  * чтобы избежать проблем с мокированием JwtDecoder в Spring Security Test.
+ * 
+ * Используем @Primary и @Order(1) для обеспечения приоритета над SecurityConfig.
  */
 @TestConfiguration
-@Order(1) // Высокий приоритет для переопределения реальной конфигурации безопасности
 public class TestSecurityConfig {
     @Bean
     @Primary
+    @Order(1)
     public SecurityFilterChain testSecurityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

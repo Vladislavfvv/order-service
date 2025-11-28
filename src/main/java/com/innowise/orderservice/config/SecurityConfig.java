@@ -23,6 +23,7 @@ import io.jsonwebtoken.security.Keys;
  */
 @Configuration
 @EnableWebSecurity
+@org.springframework.context.annotation.Profile("!test") // Не загружается в тестах, используется TestSecurityConfig
 public class SecurityConfig {
 
     @Value("${jwt.secret}")

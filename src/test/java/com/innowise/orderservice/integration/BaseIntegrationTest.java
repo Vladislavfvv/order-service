@@ -20,8 +20,8 @@ import org.testcontainers.containers.wait.strategy.Wait;
  */
 @SpringBootTest(properties = {
         "spring.cache.type=none"}) // Отключаем кеширование для интеграционных тестов
-// Примечание: НЕ используем @ActiveProfiles("test"), чтобы не загружался application-test.properties,
-// который отключает Liquibase и DataSource. Все настройки задаются через @DynamicPropertySource
+@org.springframework.test.context.ActiveProfiles("test") // Активируем профиль "test" для исключения SecurityConfig
+// Примечание: application-test.properties НЕ используется, так как все настройки задаются через @DynamicPropertySource
 // Примечание: НЕ используем @Transactional здесь, так как это может конфликтовать с MockMvc в контроллер-тестах
 public abstract class BaseIntegrationTest {
 

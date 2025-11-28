@@ -46,7 +46,11 @@ import static org.mockito.Mockito.when;
 /**
  * Интеграционные тесты для OrderService.
  * Используют реальную PostgreSQL БД через Testcontainers и мокируют только внешние сервисы (UserServiceClient).
+ * 
+ * ВАЖНО: Используем @Transactional для обеспечения доступа к ленивым коллекциям Hibernate
+ * в рамках активной сессии.
  */
+@org.springframework.transaction.annotation.Transactional
 class OrderServiceIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
