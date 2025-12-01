@@ -143,6 +143,37 @@ public class OrderService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Получает все заказы в системе.
+     * Доступно только для администраторов (проверяется в SecurityConfig).
+     *
+     * @param authToken токен для вызова user-service
+     * @return список всех заказов с информацией о пользователях
+     */
+    @Transactional(readOnly = true)
+    public List<OrderWithUserDto> getAllOrders(String authToken) {
+        log.info("Getting all orders");
+
+        List<Order> orders = orderRepository.findAll();
+
+        return orders.stream()
+                .map(order -> {
+                    long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
+                    UserDto tempUser = getUserInfo(orderOwnerId, authToken);
+                    String email = tempUser.getEmail();
+                    UserDto user;
+                    if (email == null || email.isBlank()) {
+                        log.warn("Email not found for userId: {}, using tempUser directly", orderOwnerId);
+                        user = tempUser;
+                    } else {
+                        user = getUserInfoByEmail(email, authToken);
+                    }
+                    OrderDto orderDto = orderMapper.toDto(order);
+                    return new OrderWithUserDto(orderDto, user);
+                })
+                .collect(Collectors.toList());
+    }
+
     @Transactional(readOnly = true)
     public List<OrderWithUserDto> getOrdersByStatuses(List<OrderStatus> statuses, String authToken) {
         log.info("Getting orders by statuses: {}", statuses);
@@ -168,16 +199,100 @@ public class OrderService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Получает все заказы текущего пользователя.
+     * Пользователь может видеть только свои заказы.
+     * 
+     * @param authentication объект аутентификации, содержащий JWT токен
+     * @return список заказов текущего пользователя
+     */
+    @Transactional(readOnly = true)
+    public List<OrderWithUserDto> getMyOrders(Authentication authentication) {
+        // Извлекаем email из токена
+        String email = SecurityUtils.getEmailFromToken(authentication);
+        log.info("Getting orders for user email: {}", email);
+
+        // Извлекаем токен для передачи в User Service
+        String authToken = SecurityUtils.getTokenString(authentication);
+
+        // Получаем информацию о пользователе из user-service по email
+        UserDto user = getUserInfoByEmail(email, authToken);
+        Long userId = user.getId();
+        if (userId == null) {
+            throw new IllegalStateException("User ID not found for email: " + email);
+        }
+
+        // Получаем все заказы пользователя
+        List<Order> orders = orderRepository.findAllByUserId(userId);
+        log.info("Found {} orders for user {}", orders.size(), email);
+
+        // Преобразуем заказы в DTO
+        return orders.stream()
+                .map(order -> {
+                    OrderDto orderDto = orderMapper.toDto(order);
+                    return new OrderWithUserDto(orderDto, user);
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Обновляет статус заказа.
+     * Пользователь может обновлять только свои заказы, ADMIN - любые заказы.
+     * 
+     * @param id ID заказа для обновления
+     * @param request запрос с новым статусом заказа
+     * @param authentication объект аутентификации для проверки прав доступа
+     * @return обновленный заказ с информацией о пользователе
+     * @throws AccessDeniedException если пользователь пытается обновить чужой заказ
+     */
     @Transactional
-    public OrderWithUserDto updateOrder(Long id, UpdateOrderRequest request, String authToken) {
+    public OrderWithUserDto updateOrder(Long id, UpdateOrderRequest request, Authentication authentication) {
         log.info("Updating order ID: {} with status: {}", id, request.getStatus());
 
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
 
+        // Проверка прав доступа: пользователь может обновлять только свои заказы, ADMIN - любые
+        if (authentication == null) {
+            throw new IllegalStateException("Authentication is required");
+        }
+
+        // Если пользователь не ADMIN, проверяем, что заказ принадлежит ему
+        if (!SecurityUtils.isAdmin(authentication)) {
+            // Извлекаем email текущего пользователя из токена
+            String userEmail = SecurityUtils.getEmailFromToken(authentication);
+            
+            // Извлекаем токен для получения информации о владельце заказа
+            String authToken = SecurityUtils.getTokenString(authentication);
+            
+            // Получаем информацию о владельце заказа
+            Long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
+            UserDto orderOwner = getUserInfo(orderOwnerId, authToken);
+            String orderOwnerEmail = orderOwner.getEmail();
+            
+            if (orderOwnerEmail == null || orderOwnerEmail.isBlank()) {
+                log.warn("Email not found for order owner userId: {}", orderOwnerId);
+                throw new IllegalStateException("Cannot verify order ownership: email not found for order owner");
+            }
+            
+            // Проверяем, что текущий пользователь является владельцем заказа
+            if (!userEmail.equals(orderOwnerEmail)) {
+                log.warn("User {} attempted to update order {} owned by {}", userEmail, id, orderOwnerEmail);
+                throw new AccessDeniedException("Access denied: You can only update your own orders");
+            }
+            
+            log.info("User {} is updating their own order {}", userEmail, id);
+        } else {
+            log.info("ADMIN user {} is updating order {}", authentication.getName(), id);
+        }
+
+        // Обновляем статус заказа
         order.setStatus(request.getStatus());
         final Order savedOrder = orderRepository.save(order);
 
+        // Извлекаем токен для получения информации о пользователе
+        String authToken = SecurityUtils.getTokenString(authentication);
+        
         // Получаем email владельца заказа через userId, затем используем email для получения user info
         return getOrderWithUserDto(authToken, savedOrder);
     }

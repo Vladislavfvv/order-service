@@ -50,11 +50,24 @@ public class SecurityConfig {
                         // Эндпоинты только для ADMIN
                         .requestMatchers("/api/cache/**").hasRole("ADMIN")
                         
+                        // Эндпоинты для работы с товарами
+                        .requestMatchers(HttpMethod.GET, "/api/v1/items", "/api/v1/items/**").hasAnyRole("ADMIN", "USER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/items").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/items/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/items/**").hasRole("ADMIN")
+                        
                         // Эндпоинты для получения списка всех заказов - только ADMIN
-                        .requestMatchers(HttpMethod.GET, "/api/v1/orders").hasRole("ADMIN")     
+                        .requestMatchers(HttpMethod.GET, "/api/v1/orders").hasRole("ADMIN")
+                        
+                        // Эндпоинт для получения заказов текущего пользователя - доступен USER и ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/v1/orders/my").hasAnyRole("ADMIN", "USER")
                         
                         // Эндпоинт для создания заказов из токена - требует аутентификации
                         .requestMatchers(HttpMethod.POST, "/api/v1/orders").hasAnyRole("ADMIN", "USER")
+                        
+                        // Эндпоинт для обновления заказов - USER может обновлять только свои заказы, ADMIN - любые
+                        // Проверка доступа выполняется в OrderService
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/orders/**").hasAnyRole("ADMIN", "USER")
                         
                         // Эндпоинт для удаления заказов - только ADMIN(USER не может удалять заказы - получит 403 Forbidden)
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/orders/**").hasRole("ADMIN")
