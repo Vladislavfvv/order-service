@@ -217,34 +217,11 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- javax.servlet API для WireMock 2.x (нужен класс javax.servlet.DispatcherType в тестах) -->
+        <!-- WireMock 3 (jetty12) для интеграционных тестов с user-service -->
         <dependency>
-            <groupId>javax.servlet</groupId>
-            <artifactId>javax.servlet-api</artifactId>
-            <version>4.0.1</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- Jetty server для WireMock 2.x (подтягивает нужные классы Jetty в тестах) -->
-        <dependency>
-            <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-server</artifactId>
-            <version>9.4.51.v20230217</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.github.tomakehurst</groupId>
-            <artifactId>wiremock-jre8</artifactId>
-            <version>2.35.0</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- для интеграции WireMock + Spring Boot (опционально, можно и без этого) -->
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-contract-wiremock</artifactId>
-            <version>4.1.4</version>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-jetty12</artifactId>
+            <version>3.10.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

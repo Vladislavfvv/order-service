@@ -1,6 +1,5 @@
 package com.innowise.orderservice.integration;
 
-import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.innowise.orderservice.client.UserServiceClient;
 import com.innowise.orderservice.dto.UserDto;
 import org.junit.jupiter.api.DisplayName;
@@ -24,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * Схема:
  * OrderService -> UserServiceClient (WebClient) -> WireMock (эмулирует user-service)
  */
-@org.junit.jupiter.api.Disabled("WireMock 2.x конфликтует с Jetty на Java 21, пример оставлен для демонстрации")
-@WireMockTest(httpPort = 9999)
+// Используем JUnit5-расширение WireMock 3 (jetty12) для подъёма mock-сервера на 9999 порту
+@com.github.tomakehurst.wiremock.junit5.WireMockTest(httpPort = 9999)
 class UserServiceClientWireMockIT extends BaseIntegrationTest {
 
     @Autowired
