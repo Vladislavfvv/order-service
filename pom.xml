@@ -272,7 +272,6 @@
                 <configuration>
                     <useModulePath>false</useModulePath>
                     <reportFormat>plain</reportFormat>
-
                 </configuration>
             </plugin>
             <plugin>
