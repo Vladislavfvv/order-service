@@ -48,15 +48,37 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.CREATED).body(order);
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<OrderWithUserDto> getOrderById(
-            @PathVariable Long id,
-            Authentication authentication) {
-        log.info("Getting order by ID: {}", id);
-        
+    /**
+     * Получает все заказы.
+     * Доступно только администраторам.
+     *
+     * @param authentication аутентификация администратора
+     * @return список всех заказов
+     */
+    @GetMapping
+    public ResponseEntity<List<OrderWithUserDto>> getAllOrders(Authentication authentication) {
+        log.info("Getting all orders by admin: {}", authentication != null ? authentication.getName() : "unknown");
+
         String authToken = getAuthToken(authentication);
-        OrderWithUserDto order = orderService.getOrderById(id, authToken);
-        return ResponseEntity.ok(order);
+        List<OrderWithUserDto> orders = orderService.getAllOrders(authToken);
+        return ResponseEntity.ok(orders);
+    }
+
+    /**
+     * Получает все заказы текущего пользователя.
+     * Пользователь может видеть только свои заказы.
+     * ВАЖНО: Этот метод должен быть объявлен ПЕРЕД @GetMapping("/{id}"),
+     * чтобы Spring правильно обрабатывал маршрут /my, а не пытался интерпретировать "my" как ID.
+     * 
+     * @param authentication объект аутентификации, содержащий JWT токен
+     * @return список заказов текущего пользователя
+     */
+    @GetMapping("/my")
+    public ResponseEntity<List<OrderWithUserDto>> getMyOrders(Authentication authentication) {
+        log.info("Getting orders for current user: {}", authentication.getName());
+        
+        List<OrderWithUserDto> orders = orderService.getMyOrders(authentication);
+        return ResponseEntity.ok(orders);
     }
 
     @GetMapping("/ids")
@@ -81,15 +103,35 @@ public class OrderController {
         return ResponseEntity.ok(orders);
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<OrderWithUserDto> getOrderById(
+            @PathVariable Long id,
+            Authentication authentication) {
+        log.info("Getting order by ID: {}", id);
+        
+        String authToken = getAuthToken(authentication);
+        OrderWithUserDto order = orderService.getOrderById(id, authToken);
+        return ResponseEntity.ok(order);
+    }
+
+    /**
+     * Обновляет статус заказа.
+     * Пользователь может обновлять только свои заказы, ADMIN - любые заказы.
+     * 
+     * @param id ID заказа для обновления
+     * @param request запрос с новым статусом заказа
+     * @param authentication объект аутентификации для проверки прав доступа
+     * @return обновленный заказ с информацией о пользователе
+     */
     @PutMapping("/{id}")
     public ResponseEntity<OrderWithUserDto> updateOrder(
             @PathVariable Long id,
             @Valid @RequestBody UpdateOrderRequest request,
             Authentication authentication) {
-        log.info("Updating order ID: {}", id);
+        log.info("Updating order ID: {} by user: {}", id, authentication != null ? authentication.getName() : "unknown");
         
-        String authToken = getAuthToken(authentication);
-        OrderWithUserDto order = orderService.updateOrder(id, request, authToken);
+        // Передаем Authentication для проверки прав доступа в сервисе
+        OrderWithUserDto order = orderService.updateOrder(id, request, authentication);
         return ResponseEntity.ok(order);
     }
 
@@ -97,7 +139,8 @@ public class OrderController {
     public ResponseEntity<Void> deleteOrder(
             @PathVariable Long id,
             Authentication authentication) {
-        log.info("Deleting order ID: {} by user: {}", id, authentication.getName());
+        String userName = authentication != null ? authentication.getName() : "unknown";
+        log.info("Deleting order ID: {} by user: {}", id, userName);
         
         // Проверка прав доступа выполняется в SecurityConfig (только ADMIN) и в OrderService
         orderService.deleteOrder(id, authentication);

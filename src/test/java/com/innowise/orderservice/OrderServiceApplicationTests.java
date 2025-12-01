@@ -5,6 +5,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import com.innowise.orderservice.client.UserServiceClient;
 import com.innowise.orderservice.mapper.OrderItemMapper;
 import com.innowise.orderservice.mapper.OrderMapper;
@@ -23,8 +24,15 @@ webEnvironment = NONE означает:
     Контекст создаётся только для компонентов, бинов, конфигураций.
     Используется для unit/практически integration тестов без реального HTTP сервера.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)//Запускает Spring Boot контекст для тестов.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)//Запускает Spring Boot контекст для тестов БЕЗ реальной БД.
 @ActiveProfiles("test")//Использует профиль "test" для загрузки конфигурации тестов.
+@TestPropertySource(properties = {
+    "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration," +
+    "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration," +
+    "org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration," +
+    "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration," +
+    "org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration"
+})//Отключаем автоконфигурации БД для этого теста (используем моки репозиториев).
 class OrderServiceApplicationTests {
 
     @TestConfiguration //Создаёт все моки (репозитории, клиенты, мапперы)

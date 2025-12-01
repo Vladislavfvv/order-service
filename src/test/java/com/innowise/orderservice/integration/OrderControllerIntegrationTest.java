@@ -9,7 +9,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -30,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -64,7 +64,7 @@ class OrderControllerIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     private UserServiceClient userServiceClient;
 
     // JwtDecoder настроен через @Primary бин в BaseIntegrationTest.TestJwtDecoderConfig
@@ -269,7 +269,8 @@ class OrderControllerIntegrationTest extends BaseIntegrationTest {
 
         // when & then - Выполнение HTTP запроса и проверка результатов
         mockMvc.perform(delete("/api/v1/orders/{id}", testOrder.getId())
-                        .with(jwt().jwt(jwt -> jwt.subject("admin@example.com").claim("role", "ROLE_ADMIN"))))
+                        .with(jwt().jwt(jwt -> jwt.subject("admin@example.com"))
+                                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isNoContent()); // Проверяем HTTP статус 204
 
         // Проверяем, что заказ удален из БД
@@ -286,7 +287,8 @@ class OrderControllerIntegrationTest extends BaseIntegrationTest {
 
         // when & then - Выполнение HTTP запроса и проверка ошибки доступа
         mockMvc.perform(delete("/api/v1/orders/{id}", testOrder.getId())
-                        .with(jwt().jwt(jwt -> jwt.subject("test@example.com").claim("role", "ROLE_USER"))))
+                        .with(jwt().jwt(jwt -> jwt.subject("test@example.com"))
+                                .authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden()); // Проверяем HTTP статус 403
 
         // Проверяем, что заказ НЕ был удален из БД
@@ -303,7 +305,7 @@ class OrderControllerIntegrationTest extends BaseIntegrationTest {
 
         // when & then - Выполнение HTTP запроса без авторизации и проверка ошибки
         mockMvc.perform(delete("/api/v1/orders/{id}", testOrder.getId())) //Отправляет DELETE запрос на /api/v1/orders/{id}
-                .andExpect(status().isForbidden()); // Проверяем HTTP статус 403 (Spring Security проверяет роль до авторизации)
+                .andExpect(status().isForbidden()); // Проверяем HTTP статус 403 (OrderService проверяет роль и выбрасывает AccessDeniedException)
 
         // Проверяем, что заказ НЕ был удален из БД
         assertTrue(orderRepository.findById(testOrder.getId()).isPresent()); //Проверяем, что заказ есть в БД

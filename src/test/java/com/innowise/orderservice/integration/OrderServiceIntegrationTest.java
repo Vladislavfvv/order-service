@@ -11,7 +11,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -62,7 +64,7 @@ class OrderServiceIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private ItemRepository itemRepository;
 
-    @MockBean
+    @MockitoBean
     private UserServiceClient userServiceClient;
 
     private Item testItem1;
@@ -70,6 +72,11 @@ class OrderServiceIntegrationTest extends BaseIntegrationTest {
     private UserDto testUser;
     private JwtAuthenticationToken userAuthentication;
     private JwtAuthenticationToken adminAuthentication;
+
+    @DynamicPropertySource
+    static void overrideProps(DynamicPropertyRegistry registry) {
+        registry.add("user.service.base-url", () -> "http://localhost:9999");
+    }
 
     @BeforeEach
     void setUp() {
@@ -340,14 +347,16 @@ class OrderServiceIntegrationTest extends BaseIntegrationTest {
         UpdateOrderRequest request = new UpdateOrderRequest();
         request.setStatus(OrderStatus.PROCESSING);
 
-        String authToken = "Bearer test-token";
+        // Токен из userAuthentication будет "Bearer user-token" (SecurityUtils.getTokenString добавляет "Bearer ")
+        String authToken = "Bearer user-token";
 
         // Мокируем получение пользователя из User Service
+        // Важно: используем правильный токен, который будет извлечен из userAuthentication
         when(userServiceClient.getUserById(eq(testUser.getId()), eq(authToken))).thenReturn(testUser);
         when(userServiceClient.getUserByEmail(eq("test@example.com"), eq(authToken))).thenReturn(testUser);
 
-        // when - Выполнение метода
-        OrderWithUserDto result = orderService.updateOrder(order.getId(), request, authToken);
+        // when - Выполнение метода с Authentication объектом
+        OrderWithUserDto result = orderService.updateOrder(order.getId(), request, userAuthentication);
 
         // then - Проверка результатов
         assertNotNull(result); //Проверяем, что результат не null
@@ -368,11 +377,10 @@ class OrderServiceIntegrationTest extends BaseIntegrationTest {
         Long nonExistentOrderId = 999L;
         UpdateOrderRequest request = new UpdateOrderRequest();
         request.setStatus(OrderStatus.PROCESSING);
-        String authToken = "Bearer test-token";
 
         // when & then - Проверка, что выбрасывается исключение
         assertThrows(OrderNotFoundException.class, () -> {
-            orderService.updateOrder(nonExistentOrderId, request, authToken);
+            orderService.updateOrder(nonExistentOrderId, request, userAuthentication);
         });
 
         // Проверяем, что UserServiceClient не вызывался

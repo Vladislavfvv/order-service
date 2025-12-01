@@ -504,6 +504,58 @@ class OrderServiceTest {
     }
 
     /**
+     * Тест успешного получения всех заказов.
+     * Проверяет, что метод getAllOrders:
+     * 1. Находит все заказы в репозитории
+     * 2. Для каждого заказа получает информацию о пользователе
+     * 3. Преобразует каждый Order в OrderDto через mapper
+     * 4. Возвращает список OrderWithUserDto
+     */
+    @DisplayName("getAllOrders_Success - Получение всех заказов успешно")
+    @Test
+    void getAllOrders_Success() {
+        // given
+        String authToken = "Bearer mock-token";
+
+        UserDto testUser = new UserDto(1L, "Test", "User",
+                LocalDate.of(2000, 1, 1), "testEmail@email.com");
+
+        Order order2 = new Order();
+        order2.setId(2L);
+        order2.setUserId(testUser.getId());
+        order2.setStatus(OrderStatus.PROCESSING);
+        order2.setCreation_date(LocalDateTime.now());
+
+        List<Order> orders = List.of(order, order2);
+
+        OrderDto orderDto1 = new OrderDto();
+        orderDto1.setId(1L);
+        orderDto1.setUserId(testUser.getId());
+        orderDto1.setStatus(OrderStatus.NEW);
+
+        OrderDto orderDto2 = new OrderDto();
+        orderDto2.setId(2L);
+        orderDto2.setUserId(testUser.getId());
+        orderDto2.setStatus(OrderStatus.PROCESSING);
+
+        when(orderRepository.findAll()).thenReturn(orders);
+        when(userServiceClient.getUserById(testUser.getId(), authToken)).thenReturn(testUser);
+        when(userServiceClient.getUserByEmail(testUser.getEmail(), authToken)).thenReturn(testUser);
+        when(orderMapper.toDto(order)).thenReturn(orderDto1);
+        when(orderMapper.toDto(order2)).thenReturn(orderDto2);
+
+        // when
+        List<OrderWithUserDto> result = orderService.getAllOrders(authToken);
+
+        // then
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        assertEquals(1L, result.get(0).getOrder().getId());
+        assertEquals(2L, result.get(1).getOrder().getId());
+        verify(orderRepository, times(1)).findAll();
+    }
+
+    /**
      * Тест успешного обновления заказа.
      * Проверяет, что метод updateOrder:
      * 1. Находит заказ в репозитории по ID
@@ -518,8 +570,23 @@ class OrderServiceTest {
     void updateOrder_Success() {
         // given - Подготовка тестовых данных
         Long orderId = 1L;
-        String authToken = "Bearer mock-token";
         String userEmail = "testEmail@email.com";
+        
+        // Создаём моковый Authentication объект
+        Jwt jwt = Jwt.withTokenValue("mock-token")
+                .header("alg", "HS256")
+                .claim("sub", userEmail)
+                .claim("role", "ROLE_USER")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
+        
+        JwtAuthenticationToken authentication = new JwtAuthenticationToken(
+                jwt,
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+        );
+        
+        String authToken = "Bearer mock-token";
         
         // Создаём запрос на обновление статуса заказа
         UpdateOrderRequest request = new UpdateOrderRequest();
@@ -548,8 +615,8 @@ class OrderServiceTest {
         when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser);
         when(orderMapper.toDto(updatedOrder)).thenReturn(updatedOrderDto);
         
-        // Выполняем тестируемый метод
-        OrderWithUserDto result = orderService.updateOrder(orderId, request, authToken);
+        // Выполняем тестируемый метод с Authentication объектом
+        OrderWithUserDto result = orderService.updateOrder(orderId, request, authentication);
         
         // then - Проверка результатов
         assertNotNull(result);
@@ -574,7 +641,22 @@ class OrderServiceTest {
     void updateOrder_NotFound_ThrowsException() {
         // given - Подготовка тестовых данных с несуществующим заказом
         Long orderId = 999L;
-        String authToken = "Bearer mock-token";
+        String userEmail = "testEmail@email.com";
+        
+        // Создаём моковый Authentication объект
+        Jwt jwt = Jwt.withTokenValue("mock-token")
+                .header("alg", "HS256")
+                .claim("sub", userEmail)
+                .claim("role", "ROLE_USER")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
+        
+        JwtAuthenticationToken authentication = new JwtAuthenticationToken(
+                jwt,
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+        );
+        
         UpdateOrderRequest request = new UpdateOrderRequest();
         request.setStatus(OrderStatus.PROCESSING);
         
@@ -583,7 +665,7 @@ class OrderServiceTest {
         
         // then - Проверка, что выбрасывается исключение
         assertThrows(OrderNotFoundException.class, () -> {
-            orderService.updateOrder(orderId, request, authToken);
+            orderService.updateOrder(orderId, request, authentication);
         });
         
         // Проверяем, что поиск заказа был выполнен

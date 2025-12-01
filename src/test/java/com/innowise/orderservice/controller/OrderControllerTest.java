@@ -10,7 +10,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -42,7 +41,7 @@ class OrderControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     private OrderService orderService;
 
     @Autowired
@@ -63,6 +62,21 @@ class OrderControllerTest {
         orderDto.setCreationDate(LocalDateTime.now());
         
         orderWithUserDto = new OrderWithUserDto(orderDto, userDto);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/orders - успешное получение всех заказов админом")
+    void getAllOrders_ShouldReturnOrders_WhenAdmin() throws Exception {
+        // given
+        when(orderService.getAllOrders(any())).thenReturn(List.of(orderWithUserDto));
+
+        // when & then
+        mockMvc.perform(get("/api/v1/orders")
+                        .with(jwt().jwt(jwt -> jwt.subject("admin@example.com").claim("role", "ROLE_ADMIN"))))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$[0].order.id").value(1L))
+                .andExpect(jsonPath("$[0].user.email").value("user@example.com"));
     }
 
     /**
