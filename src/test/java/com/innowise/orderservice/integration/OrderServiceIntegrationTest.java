@@ -11,6 +11,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -70,6 +72,11 @@ class OrderServiceIntegrationTest extends BaseIntegrationTest {
     private UserDto testUser;
     private JwtAuthenticationToken userAuthentication;
     private JwtAuthenticationToken adminAuthentication;
+
+    @DynamicPropertySource
+    static void overrideProps(DynamicPropertyRegistry registry) {
+        registry.add("user.service.base-url", () -> "http://localhost:9999");
+    }
 
     @BeforeEach
     void setUp() {
