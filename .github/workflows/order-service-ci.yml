@@ -32,7 +32,12 @@ jobs:
       - name: SonarCloud Scan
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B sonar:sonar
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          mvn -B -e sonar:sonar \
+            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.organization=vladislavfvv \
+            -Dsonar.projectKey=Vladislavfvv_order-service
 
   docker-image:
     name: Build Docker image
