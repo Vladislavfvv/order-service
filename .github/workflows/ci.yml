@@ -59,12 +59,12 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      - name: SonarCloud Scan
+      - name: Build and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          mvn -B -e sonar:sonar \
+          mvn -B -e clean verify sonar:sonar \
             -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
             -Dsonar.organization=vladislavfvv \
             -Dsonar.projectKey=Vladislavfvv_order-service
