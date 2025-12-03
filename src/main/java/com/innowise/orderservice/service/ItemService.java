@@ -24,9 +24,8 @@ public class ItemService {
     private final ItemMapper itemMapper;
 
     /**
-     * Получает все товары.
-     * 
-     * @return список всех товаров
+     * Получает все товары.     * 
+     * список всех товаров
      */
     @Transactional(readOnly = true)
     public List<ItemDto> getAllItems() {

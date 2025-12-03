@@ -1,21 +1,23 @@
 services:
   # База данных для order-service
-  order_db:
+  os_db:
     image: postgres:16
-    container_name: order_db
+    container_name: os_db
     restart: always
     environment:
-      POSTGRES_DB: order_db
+      POSTGRES_DB: os_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5434:5432"
+      # Внутри контейнера Postgres слушает на 5432, на хосте используем 5544,
+      # чтобы не конфликтовать с общим стеком из gateway-service (postgres-order: 5434:5432)
+      - "5544:5432"
     volumes:
-      - order_db_data:/var/lib/postgresql/data
+      - os_db_data:/var/lib/postgresql/data
     networks:
       - backend-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d order_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d os_db"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -26,11 +28,11 @@ services:
     build: .
     container_name: order-service
     depends_on:
-      order_db:
+      os_db:
         condition: service_healthy
     environment:
       # Настройки подключения к PostgreSQL
-      SPRING_DATASOURCE_URL: jdbc:postgresql://order_db:5432/order_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://os_db:5432/os_db
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
 
@@ -46,7 +48,7 @@ services:
     restart: always
 
 volumes:
-  order_db_data:
+  os_db_data:
 
 networks:
   backend-network:

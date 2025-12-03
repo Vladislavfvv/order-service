@@ -29,21 +29,19 @@ public class UserServiceClient {
     public UserDto getUserById(long userId, String authToken) {
         try {
             String baseUrl = Objects.requireNonNullElse(userServiceUrl, "http://user-service:8080");
-            WebClient webClient = webClientBuilder.baseUrl(baseUrl).build();
+            WebClient webClient = webClientBuilder.baseUrl(baseUrl).build(); //получаем WebClient, у которого базовый URL выставлен.
 
-            return webClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            // Используем REST API user-service для получения пользователя по id
+            return webClient.get() //получаем WebClient, у которого базовый URL выставлен.
+                    .uri(uriBuilder -> uriBuilder //строим конечный путь запроса и query-параметры.
                             .path("/api/v1/users/id")
                             .queryParam("id", userId)
-                            .build())
-                    // Прокидываем исходный Authorization заголовок, чтобы user-service мог валидировать токен
-                    .header("Authorization", buildAuthorizationHeader(authToken))
-                    .retrieve()
-                    .bodyToMono(UserDto.class)
-                    .block();
+                            .build()) //строим конечный путь запроса и query-параметры.
+                    .header("Authorization", buildAuthorizationHeader(authToken)) //пробрасываем заголовок авторизации через buildAuthorizationHeader
+                    .retrieve() //запускаем запрос, получаем Mono<UserDto> и блокируем текущий поток до получения ответа
+                    .bodyToMono(UserDto.class) //преобразуем ответ от User Service в UserDto
+                    .block(); //блокируем текущий поток до получения ответа
         } catch (WebClientResponseException e) {
-            log.error("Error calling User Service for userId {}: {}", userId, e.getMessage());
+            log.error("Error calling User Service for userId {}: {}", userId, e.getMessage()); //логируем ошибку
             throw new UserServiceException("Failed to get user by id: " + userId, e);
         } catch (Exception e) {
             log.error("Unexpected error calling User Service for userId {}: {}", userId, e.getMessage());
@@ -58,11 +56,11 @@ public class UserServiceClient {
             String baseUrl = Objects.requireNonNullElse(userServiceUrl, "http://user-service:8080"); //если поле userServiceUrl null, используется запасной URL
             WebClient webClient = webClientBuilder.baseUrl(baseUrl).build();//получаем WebClient, у которого базовый URL выставлен.
 
-            return webClient.get()
+            return webClient.get() //получаем WebClient, у которого базовый URL выставлен.
                     .uri(uriBuilder -> uriBuilder//строим конечный путь запроса и query-параметры.
-                            .path("/api/v1/users/email")
+                            .path("/api/v1/users/email") //путь запроса
                             .queryParam("email", email)
-                            .build())
+                            .build()) //строим конечный путь запроса и query-параметры.
                     .header("Authorization", buildAuthorizationHeader(authToken)) //пробрасываем заголовок авторизации через buildAuthorizationHeader
                     .retrieve()//запускаем запрос, получаем Mono<UserDto> и блокируем текущий поток до получения ответа
                     .bodyToMono(UserDto.class)
@@ -97,7 +95,7 @@ public class UserServiceClient {
 
     //Формирует корректный заголовок Authorization. Если authToken уже начинается с "Bearer", возвращает как есть; иначе добавляет префикс "Bearer "
     private String buildAuthorizationHeader(String authToken) {
-        if (authToken == null || authToken.isBlank()) {
+        if (authToken == null || authToken.isBlank()) { //если authToken null или пустой, возвращаем пустую строку
             return "";
         }
         return authToken.startsWith("Bearer") ? authToken : "Bearer " + authToken;
