@@ -2,11 +2,15 @@
 FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
 
-# Копирование всех файлов проекта (pom.xml, src и т.д.)
-COPY . .
+# Копирование pom.xml для кэширования зависимостей
+COPY pom.xml .
+RUN mvn -B dependency:go-offline || true
+
+# Копирование исходного кода
+COPY src ./src
 
 # Сборка проекта (пропускаем тесты для ускорения сборки образа)
-RUN mvn -B package -DskipTests
+RUN mvn -B clean package -DskipTests
 
 # === Этап 2: Запуск приложения ===
 FROM eclipse-temurin:21-jdk
