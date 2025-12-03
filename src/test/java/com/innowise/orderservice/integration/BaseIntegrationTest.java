@@ -171,7 +171,7 @@ public abstract class BaseIntegrationTest {
             // Читаем параметры подключения из переменных окружения
             String pgHost = System.getenv().getOrDefault("POSTGRES_HOST", "localhost");
             String pgPort = System.getenv().getOrDefault("POSTGRES_PORT", "5432");
-            String pgDb = System.getenv().getOrDefault("POSTGRES_DB", "us_db");
+            String pgDb = System.getenv().getOrDefault("POSTGRES_DB", "os_db");
             String pgUser = System.getenv().getOrDefault("POSTGRES_USER", "postgres");
             String pgPass = System.getenv().getOrDefault("POSTGRES_PASSWORD", "postgres");
 
