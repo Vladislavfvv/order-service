@@ -44,8 +44,8 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Публичные эндпоинты
-                        .requestMatchers("/actuator/health", "/actuator/info").hasRole("ADMIN")
+                        // Публичные эндпоинты - доступны без аутентификации для мониторинга
+                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
 
                         // Эндпоинты только для ADMIN
                         .requestMatchers("/api/cache/**").hasRole("ADMIN")
