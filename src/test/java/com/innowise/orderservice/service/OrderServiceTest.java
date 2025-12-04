@@ -528,6 +528,8 @@ class OrderServiceTest {
         String authToken = "Bearer mock-token";
         String userEmail = "testEmail@email.com";
         
+        JwtAuthenticationToken authentication = createMockAuthentication(userEmail, "USER");
+        
         UserDto testUser = new UserDto(1L, "Test", "User", 
                 LocalDate.of(2000, 1, 1), userEmail);
         
@@ -552,24 +554,32 @@ class OrderServiceTest {
         orderDto2.setStatus(OrderStatus.PROCESSING);
         
         // when - Настройка моков и выполнение метода
-        when(orderRepository.findAllByIdIn(orderIds)).thenReturn(orders); //Мокируем ситуацию, когда заказы найдены
-        when(userServiceClient.getUserById(testUser.getId(), authToken)).thenReturn(testUser); //Мокируем ситуацию, когда пользователь найден по ID
-        when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser); //Мокируем ситуацию, когда пользователь найден по email
-        when(orderMapper.toDto(order)).thenReturn(orderDto1); //Мокируем ситуацию, когда заказ преобразуется в OrderDto
-        when(orderMapper.toDto(order2)).thenReturn(orderDto2); //Мокируем ситуацию, когда заказ преобразуется в OrderDto
+        when(orderRepository.findAllByIdIn(orderIds)).thenReturn(orders);
+        when(userServiceClient.getUserById(testUser.getId(), authToken)).thenReturn(testUser);
+        when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser);
+        when(orderMapper.toDto(order)).thenReturn(orderDto1);
+        when(orderMapper.toDto(order2)).thenReturn(orderDto2);
         
-        // Выполняем тестируемый метод
-        List<OrderWithUserDto> result = orderService.getOrdersByIds(orderIds, authToken); //Вызываем метод getOrdersByIds и получаем результат
-        
-        // then - Проверка результатов
-        assertNotNull(result); //Проверяем, что результат не null
-        // Проверяем, что вернулось правильное количество заказов
-        assertEquals(2, result.size()); //Проверяем, что в результате 2 заказа
-        // Проверяем, что IDs заказов соответствуют ожидаемым
-        assertEquals(1L, result.get(0).getOrder().getId()); //Проверяем, что ID первого заказа совпадает с ожидаемым
-        assertEquals(2L, result.get(1).getOrder().getId()); //Проверяем, что ID второго заказа совпадает с ожидаемым
-        // Проверяем, что метод был вызван один раз
-        verify(orderRepository, times(1)).findAllByIdIn(orderIds); //Проверяем, что метод findAllByIdIn был вызван 1 раз
+        // Мокируем SecurityUtils
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.isAdmin(authentication))
+                    .thenReturn(false);
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getEmailFromToken(authentication))
+                    .thenReturn(userEmail);
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(authentication))
+                    .thenReturn(authToken);
+            
+            // Выполняем тестируемый метод
+            List<OrderWithUserDto> result = orderService.getOrdersByIds(orderIds, authentication);
+            
+            // then - Проверка результатов
+            assertNotNull(result);
+            assertEquals(2, result.size());
+            assertEquals(1L, result.get(0).getOrder().getId());
+            assertEquals(2L, result.get(1).getOrder().getId());
+            verify(orderRepository, times(1)).findAllByIdIn(orderIds);
+        }
     }
 
     /**
@@ -588,6 +598,8 @@ class OrderServiceTest {
         List<OrderStatus> statuses = List.of(OrderStatus.NEW, OrderStatus.PROCESSING);
         String authToken = "Bearer mock-token";
         String userEmail = "testEmail@email.com";
+        
+        JwtAuthenticationToken authentication = createMockAuthentication(userEmail, "USER");
         
         UserDto testUser = new UserDto(1L, "Test", "User", 
                 LocalDate.of(2000, 1, 1), userEmail);
@@ -613,25 +625,32 @@ class OrderServiceTest {
         orderDto2.setStatus(OrderStatus.PROCESSING);
         
         // when - Настройка моков и выполнение метода
-        when(orderRepository.findAllByStatusIn(statuses)).thenReturn(orders); //Мокируем ситуацию, когда заказы найдены     
-        when(userServiceClient.getUserById(testUser.getId(), authToken)).thenReturn(testUser); //Мокируем ситуацию, когда пользователь найден по ID
-        when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser); //Мокируем ситуацию, когда пользователь найден по email
-        when(orderMapper.toDto(order)).thenReturn(orderDto1); //Мокируем ситуацию, когда заказ преобразуется в OrderDto
-        when(orderMapper.toDto(order2)).thenReturn(orderDto2); //Мокируем ситуацию, когда заказ преобразуется в OrderDto
+        when(orderRepository.findAllByStatusIn(statuses)).thenReturn(orders);
+        when(userServiceClient.getUserById(testUser.getId(), authToken)).thenReturn(testUser);
+        when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser);
+        when(orderMapper.toDto(order)).thenReturn(orderDto1);
+        when(orderMapper.toDto(order2)).thenReturn(orderDto2);
         
-        // Выполняем тестируемый метод
-        List<OrderWithUserDto> result = orderService.getOrdersByStatuses(statuses, authToken);
-        
-        // then - Проверка результатов
-        assertNotNull(result);
-        // Проверяем, что вернулось правильное количество заказов
-        assertEquals(2, result.size());
-        // Проверяем, что в результате есть заказ со статусом NEW
-        assertTrue(result.stream().anyMatch(o -> o.getOrder().getStatus() == OrderStatus.NEW)); 
-        // Проверяем, что в результате есть заказ со статусом PROCESSING
-        assertTrue(result.stream().anyMatch(o -> o.getOrder().getStatus() == OrderStatus.PROCESSING)); 
-        // Проверяем, что метод был вызван один раз
-        verify(orderRepository, times(1)).findAllByStatusIn(statuses); 
+        // Мокируем SecurityUtils
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.isAdmin(authentication))
+                    .thenReturn(false);
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getEmailFromToken(authentication))
+                    .thenReturn(userEmail);
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(authentication))
+                    .thenReturn(authToken);
+            
+            // Выполняем тестируемый метод
+            List<OrderWithUserDto> result = orderService.getOrdersByStatuses(statuses, authentication);
+            
+            // then - Проверка результатов
+            assertNotNull(result);
+            assertEquals(2, result.size());
+            assertTrue(result.stream().anyMatch(o -> o.getOrder().getStatus() == OrderStatus.NEW));
+            assertTrue(result.stream().anyMatch(o -> o.getOrder().getStatus() == OrderStatus.PROCESSING));
+            verify(orderRepository, times(1)).findAllByStatusIn(statuses);
+        }
     }
 
     /**

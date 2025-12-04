@@ -165,10 +165,37 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    public List<OrderWithUserDto> getOrdersByIds(List<Long> ids, String authToken) {
+    public List<OrderWithUserDto> getOrdersByIds(List<Long> ids, Authentication authentication) {
         log.info("Getting orders by IDs: {}", ids);
 
+        // Извлекаем токен для передачи в user-service
+        String authToken = SecurityUtils.getTokenString(authentication);
+
         List<Order> orders = orderRepository.findAllByIdIn(ids);
+        
+        // Если пользователь не админ, фильтруем заказы - показываем только свои
+        if (!SecurityUtils.isAdmin(authentication)) {
+            String userEmail = SecurityUtils.getEmailFromToken(authentication);
+            log.info("Regular user {} is requesting orders by IDs. Filtering to show only their orders.", userEmail);
+            
+            // Фильтруем заказы: оставляем только те, которые принадлежат текущему пользователю
+            List<Order> filteredOrders = orders.stream()
+                    .filter(order -> {
+                        long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
+                        UserDto orderOwner = getUserInfo(orderOwnerId, authToken);
+                        String orderOwnerEmail = orderOwner.getEmail();
+                        boolean isOwner = userEmail.equals(orderOwnerEmail);
+                        if (!isOwner) {
+                            log.debug("Order {} belongs to {}, not to {}. Filtering out.", order.getId(), orderOwnerEmail, userEmail);
+                        }
+                        return isOwner;
+                    })
+                    .collect(Collectors.toList());
+            
+            orders = filteredOrders;
+        } else {
+            log.info("ADMIN user {} is requesting orders by IDs. Showing all requested orders.", authentication.getName());
+        }
         
         return orders.stream()
                 .map(order -> {
@@ -221,10 +248,37 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    public List<OrderWithUserDto> getOrdersByStatuses(List<OrderStatus> statuses, String authToken) {
+    public List<OrderWithUserDto> getOrdersByStatuses(List<OrderStatus> statuses, Authentication authentication) {
         log.info("Getting orders by statuses: {}", statuses);
 
+        // Извлекаем токен для передачи в user-service
+        String authToken = SecurityUtils.getTokenString(authentication);
+
         List<Order> orders = orderRepository.findAllByStatusIn(statuses);
+        
+        // Если пользователь не админ, фильтруем заказы - показываем только свои
+        if (!SecurityUtils.isAdmin(authentication)) {
+            String userEmail = SecurityUtils.getEmailFromToken(authentication);
+            log.info("Regular user {} is requesting orders by statuses. Filtering to show only their orders.", userEmail);
+            
+            // Фильтруем заказы: оставляем только те, которые принадлежат текущему пользователю
+            List<Order> filteredOrders = orders.stream()
+                    .filter(order -> {
+                        long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
+                        UserDto orderOwner = getUserInfo(orderOwnerId, authToken);
+                        String orderOwnerEmail = orderOwner.getEmail();
+                        boolean isOwner = userEmail.equals(orderOwnerEmail);
+                        if (!isOwner) {
+                            log.debug("Order {} belongs to {}, not to {}. Filtering out.", order.getId(), orderOwnerEmail, userEmail);
+                        }
+                        return isOwner;
+                    })
+                    .collect(Collectors.toList());
+            
+            orders = filteredOrders;
+        } else {
+            log.info("ADMIN user {} is requesting orders by statuses. Showing all requested orders.", authentication.getName());
+        }
         
         return orders.stream()
                 .map(order -> {

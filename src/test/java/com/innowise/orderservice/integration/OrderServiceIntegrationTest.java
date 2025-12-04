@@ -393,14 +393,25 @@ class OrderServiceIntegrationTest extends BaseIntegrationTest {
         when(userServiceClient.getUserById(eq(testUser.getId()), eq(authToken))).thenReturn(testUser);
         when(userServiceClient.getUserByEmail(eq("test@example.com"), eq(authToken))).thenReturn(testUser);
 
-        // when - Выполнение метода
-        List<OrderWithUserDto> result = orderService.getOrdersByIds(orderIds, authToken);
+        // Мокируем SecurityUtils
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.isAdmin(userAuthentication))
+                    .thenReturn(false);
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getEmailFromToken(userAuthentication))
+                    .thenReturn("test@example.com");
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(userAuthentication))
+                    .thenReturn(authToken);
 
-        // then - Проверка результатов
-        assertNotNull(result); //Проверяем, что результат не null
-        assertEquals(2, result.size()); //Проверяем, что в результате 2 заказа
-        assertTrue(result.stream().anyMatch(o -> o.getOrder().getId().equals(savedOrder1.getId()))); //Проверяем, что в результате есть заказ с ID savedOrder1
-        assertTrue(result.stream().anyMatch(o -> o.getOrder().getId().equals(savedOrder2.getId()))); //Проверяем, что в результате есть заказ с ID savedOrder2
+            // when - Выполнение метода
+            List<OrderWithUserDto> result = orderService.getOrdersByIds(orderIds, userAuthentication);
+
+            // then - Проверка результатов
+            assertNotNull(result);
+            assertEquals(2, result.size());
+            assertTrue(result.stream().anyMatch(o -> o.getOrder().getId().equals(savedOrder1.getId())));
+            assertTrue(result.stream().anyMatch(o -> o.getOrder().getId().equals(savedOrder2.getId())));
+        }
     }
 
     /**
@@ -435,15 +446,26 @@ class OrderServiceIntegrationTest extends BaseIntegrationTest {
         when(userServiceClient.getUserById(eq(testUser.getId()), eq(authToken))).thenReturn(testUser);
         when(userServiceClient.getUserByEmail(eq("test@example.com"), eq(authToken))).thenReturn(testUser);
 
-        // when - Выполнение метода
-        List<OrderWithUserDto> result = orderService.getOrdersByStatuses(statuses, authToken);
+        // Мокируем SecurityUtils
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.isAdmin(userAuthentication))
+                    .thenReturn(false);
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getEmailFromToken(userAuthentication))
+                    .thenReturn("test@example.com");
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(userAuthentication))
+                    .thenReturn(authToken);
 
-        // then - Проверка результатов
-        assertNotNull(result); //Проверяем, что результат не null
-        assertEquals(2, result.size()); // Только NEW и PROCESSING
-        assertTrue(result.stream().anyMatch(o -> o.getOrder().getStatus() == OrderStatus.NEW)); //Проверяем, что в результате есть заказ с статусом NEW
-        assertTrue(result.stream().anyMatch(o -> o.getOrder().getStatus() == OrderStatus.PROCESSING)); //Проверяем, что в результате есть заказ с статусом PROCESSING
-        assertTrue(result.stream().noneMatch(o -> o.getOrder().getStatus() == OrderStatus.COMPLETED)); //Проверяем, что в результате нет заказа с статусом COMPLETED
+            // when - Выполнение метода
+            List<OrderWithUserDto> result = orderService.getOrdersByStatuses(statuses, userAuthentication);
+
+            // then - Проверка результатов
+            assertNotNull(result);
+            assertEquals(2, result.size()); // Только NEW и PROCESSING
+            assertTrue(result.stream().anyMatch(o -> o.getOrder().getStatus() == OrderStatus.NEW));
+            assertTrue(result.stream().anyMatch(o -> o.getOrder().getStatus() == OrderStatus.PROCESSING));
+            assertTrue(result.stream().noneMatch(o -> o.getOrder().getStatus() == OrderStatus.COMPLETED));
+        }
     }
 
     /**

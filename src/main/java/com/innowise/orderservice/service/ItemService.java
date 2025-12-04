@@ -65,6 +65,24 @@ public class ItemService {
     }
 
     /**
+     * Создает несколько товаров за один запрос.
+     *
+     * @param itemDtos список данных товаров
+     * @return список созданных товаров
+     */
+    @Transactional
+    public List<ItemDto> createItems(List<ItemDto> itemDtos) {
+        log.info("Creating {} items", itemDtos.size());
+        List<Item> items = itemDtos.stream()
+                .map(itemMapper::toEntity)
+                .collect(Collectors.toList());
+        List<Item> savedItems = itemRepository.saveAll(items);
+        return savedItems.stream()
+                .map(itemMapper::toDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Обновляет существующий товар.
      *
      * @param id      ID товара для обновления

@@ -23,6 +23,8 @@ import com.innowise.orderservice.dto.UserDto;
 import com.innowise.orderservice.model.OrderStatus;
 import com.innowise.orderservice.service.OrderService;
 
+import org.springframework.security.core.Authentication;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -259,7 +261,7 @@ class OrderControllerTest {
         );
 
         // when - Настройка моков
-        when(orderService.getOrdersByIds(eq(ids), any())).thenReturn(List.of(orderWithUserDto, order2));
+        when(orderService.getOrdersByIds(eq(ids), any(Authentication.class))).thenReturn(List.of(orderWithUserDto, order2));
 
         // then - Выполнение запроса и проверка результатов
         mockMvc.perform(get("/api/v1/orders/ids")
@@ -287,7 +289,7 @@ class OrderControllerTest {
         List<OrderStatus> statuses = List.of(OrderStatus.NEW, OrderStatus.PROCESSING);
 
         // when - Настройка моков
-        when(orderService.getOrdersByStatuses(eq(statuses), any())).thenReturn(List.of(orderWithUserDto));
+        when(orderService.getOrdersByStatuses(eq(statuses), any(Authentication.class))).thenReturn(List.of(orderWithUserDto));
 
         // then - Выполнение запроса и проверка результатов
         mockMvc.perform(get("/api/v1/orders/statuses")

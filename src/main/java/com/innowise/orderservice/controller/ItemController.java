@@ -70,6 +70,20 @@ public class ItemController {
     }
 
     /**
+     * Создает несколько товаров за один запрос.
+     * Доступно только администраторам.
+     * 
+     * @param itemDtos список данных товаров
+     * @return список созданных товаров
+     */
+    @PostMapping("/batch")
+    public ResponseEntity<List<ItemDto>> createItems(@Valid @RequestBody List<ItemDto> itemDtos) {
+        log.info("Creating {} items", itemDtos.size());
+        List<ItemDto> createdItems = itemService.createItems(itemDtos);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdItems);
+    }
+
+    /**
      * Обновляет существующий товар.
      * Доступно только администраторам.
      *

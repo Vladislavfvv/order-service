@@ -52,6 +52,7 @@ public class SecurityConfig {
                         
                         // Эндпоинты для работы с товарами
                         .requestMatchers(HttpMethod.GET, "/api/v1/items", "/api/v1/items/**").hasAnyRole("ADMIN", "USER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/items/batch").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/items").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/items/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/items/**").hasRole("ADMIN")

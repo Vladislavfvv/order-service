@@ -87,8 +87,8 @@ public class OrderController {
             Authentication authentication) {
         log.info("Getting orders by IDs: {}", ids);
         
-        String authToken = getAuthToken(authentication);
-        List<OrderWithUserDto> orders = orderService.getOrdersByIds(ids, authToken);
+        // Передаем Authentication для проверки прав доступа в сервисе
+        List<OrderWithUserDto> orders = orderService.getOrdersByIds(ids, authentication);
         return ResponseEntity.ok(orders);
     }
 
@@ -98,8 +98,8 @@ public class OrderController {
             Authentication authentication) {
         log.info("Getting orders by statuses: {}", statuses);
         
-        String authToken = getAuthToken(authentication);
-        List<OrderWithUserDto> orders = orderService.getOrdersByStatuses(statuses, authToken);
+        // Передаем Authentication для проверки прав доступа в сервисе
+        List<OrderWithUserDto> orders = orderService.getOrdersByStatuses(statuses, authentication);
         return ResponseEntity.ok(orders);
     }
 
