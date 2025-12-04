@@ -241,7 +241,10 @@ class OrderServiceIntegrationTest extends BaseIntegrationTest {
             assertEquals(testUser.getId(), result.getUser().getId());
             assertEquals("test@example.com", result.getUser().getEmail());
             
-            verify(userServiceClient, times(1)).getUserById(eq(testUser.getId()), eq(authToken)); //Проверяем, что UserServiceClient был вызван 1 раз
+            // getUserById вызывается 2 раза:
+            // 1. При проверке доступа (для получения email владельца заказа)
+            // 2. В getOrderWithUserDto (для получения полной информации о пользователе)
+            verify(userServiceClient, times(2)).getUserById(eq(testUser.getId()), eq(authToken));
             verify(userServiceClient, times(1)).getUserByEmail(eq("test@example.com"), eq(authToken)); //Проверяем, что UserServiceClient был вызван 1 раз
         }
     }
