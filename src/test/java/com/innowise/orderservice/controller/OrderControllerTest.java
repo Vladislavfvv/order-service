@@ -200,6 +200,46 @@ class OrderControllerTest {
                 .andExpect(jsonPath("$.user.id").value(1L)); // Проверяем ID пользователя
     }
 
+    @DisplayName("getMyOrders_Success - Успешное получение своих заказов")
+    @Test
+    void getMyOrders_Success() throws Exception {
+        // given - Подготовка тестовых данных
+        String userEmail = "user@example.com";
+        List<OrderWithUserDto> myOrders = List.of(orderWithUserDto);
+
+        // when - Настройка моков
+        when(orderService.getMyOrders(any())).thenReturn(myOrders);
+
+        // then - Выполнение запроса и проверка результатов
+        mockMvc.perform(get("/api/v1/orders/my")
+                        .with(jwt().jwt(jwt -> jwt.subject(userEmail).claim("role", "ROLE_USER"))))
+                .andExpect(status().isOk()) // Проверяем HTTP статус 200
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON)) // Проверяем тип контента
+                .andExpect(jsonPath("$").isArray()) // Проверяем, что ответ - массив
+                .andExpect(jsonPath("$.length()").value(1)) // Проверяем количество заказов
+                .andExpect(jsonPath("$[0].order.id").value(1L)) // Проверяем ID заказа
+                .andExpect(jsonPath("$[0].user.email").value(userEmail)); // Проверяем email пользователя
+    }
+
+    @DisplayName("getMyOrders_Success_Admin - Админ может получить свои заказы")
+    @Test
+    void getMyOrders_Success_Admin() throws Exception {
+        // given - Подготовка тестовых данных
+        String adminEmail = "admin@example.com";
+        List<OrderWithUserDto> myOrders = List.of(orderWithUserDto);
+
+        // when - Настройка моков
+        when(orderService.getMyOrders(any())).thenReturn(myOrders);
+
+        // then - Выполнение запроса и проверка результатов
+        mockMvc.perform(get("/api/v1/orders/my")
+                        .with(jwt().jwt(jwt -> jwt.subject(adminEmail).claim("role", "ROLE_ADMIN"))))
+                .andExpect(status().isOk()) // Проверяем HTTP статус 200
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON)) // Проверяем тип контента
+                .andExpect(jsonPath("$").isArray()) // Проверяем, что ответ - массив
+                .andExpect(jsonPath("$.length()").value(1)); // Проверяем количество заказов
+    }
+
     /**
      * Тест успешного получения нескольких заказов по списку IDs через REST API.
      * Проверяет, что эндпоинт GET /api/v1/orders/ids:

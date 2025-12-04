@@ -892,4 +892,124 @@ class OrderServiceTest {
         verify(orderRepository, never()).delete(any(Order.class));
     }
 
+    /**
+     * Тест успешного получения заказов текущего пользователя.
+     * Проверяет, что метод getMyOrders:
+     * 1. Извлекает email из JWT токена
+     * 2. Получает информацию о пользователе через UserServiceClient по email
+     * 3. Находит все заказы пользователя в репозитории по userId
+     * 4. Преобразует каждый Order в OrderDto через mapper
+     * 5. Возвращает список OrderWithUserDto с информацией о заказах и пользователе
+     */
+    @DisplayName("getMyOrders_Success - Получение своих заказов успешно")
+    @Test
+    void getMyOrders_Success() {
+        // given - Подготовка тестовых данных
+        String userEmail = "test@example.com";
+        String authToken = "Bearer mock-token";
+        JwtAuthenticationToken authentication = createMockAuthentication(userEmail, "USER");
+        
+        // Создаём тестового пользователя
+        UserDto testUser = new UserDto(1L, "Test", "User", 
+                LocalDate.of(2000, 1, 1), userEmail);
+        
+        // Создаём второй заказ для теста
+        Order order2 = new Order();
+        order2.setId(2L);
+        order2.setUserId(testUser.getId());
+        order2.setStatus(OrderStatus.PROCESSING);
+        order2.setCreation_date(LocalDateTime.now());
+        
+        List<Order> userOrders = List.of(order, order2);
+        
+        // Создаём ожидаемые DTO для заказов
+        OrderDto orderDto1 = new OrderDto();
+        orderDto1.setId(1L);
+        orderDto1.setUserId(testUser.getId());
+        orderDto1.setStatus(OrderStatus.NEW);
+        
+        OrderDto orderDto2 = new OrderDto();
+        orderDto2.setId(2L);
+        orderDto2.setUserId(testUser.getId());
+        orderDto2.setStatus(OrderStatus.PROCESSING);
+        
+        // when - Настройка моков и выполнение метода
+        when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser);
+        when(orderRepository.findAllByUserId(testUser.getId())).thenReturn(userOrders);
+        when(orderMapper.toDto(order)).thenReturn(orderDto1);
+        when(orderMapper.toDto(order2)).thenReturn(orderDto2);
+        
+        // Мокируем SecurityUtils
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            // Email из токена
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getEmailFromToken(authentication))
+                    .thenReturn(userEmail);
+            // Токен для передачи в user-service
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(authentication))
+                    .thenReturn(authToken);
+            
+            // Выполняем тестируемый метод
+            List<OrderWithUserDto> result = orderService.getMyOrders(authentication);
+            
+            // then - Проверка результатов
+            assertNotNull(result);
+            assertEquals(2, result.size());
+            assertEquals(1L, result.get(0).getOrder().getId());
+            assertEquals(2L, result.get(1).getOrder().getId());
+            assertEquals(testUser.getId(), result.get(0).getUser().getId());
+            assertEquals(userEmail, result.get(0).getUser().getEmail());
+            
+            // Проверяем, что методы были вызваны нужное количество раз
+            verify(userServiceClient, times(1)).getUserByEmail(userEmail, authToken);
+            verify(orderRepository, times(1)).findAllByUserId(testUser.getId());
+        }
+    }
+
+    /**
+     * Тест получения заказов текущего пользователя, когда заказов нет.
+     * Проверяет, что метод getMyOrders:
+     * 1. Извлекает email из JWT токена
+     * 2. Получает информацию о пользователе через UserServiceClient по email
+     * 3. Возвращает пустой список, если у пользователя нет заказов
+     */
+    @DisplayName("getMyOrders_EmptyList - Получение своих заказов, когда заказов нет")
+    @Test
+    void getMyOrders_EmptyList() {
+        // given - Подготовка тестовых данных
+        String userEmail = "test@example.com";
+        String authToken = "Bearer mock-token";
+        JwtAuthenticationToken authentication = createMockAuthentication(userEmail, "USER");
+        
+        // Создаём тестового пользователя
+        UserDto testUser = new UserDto(1L, "Test", "User", 
+                LocalDate.of(2000, 1, 1), userEmail);
+        
+        // when - Настройка моков и выполнение метода
+        when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser);
+        when(orderRepository.findAllByUserId(testUser.getId())).thenReturn(List.of());
+        
+        // Мокируем SecurityUtils
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            // Email из токена
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getEmailFromToken(authentication))
+                    .thenReturn(userEmail);
+            // Токен для передачи в user-service
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(authentication))
+                    .thenReturn(authToken);
+            
+            // Выполняем тестируемый метод
+            List<OrderWithUserDto> result = orderService.getMyOrders(authentication);
+            
+            // then - Проверка результатов
+            assertNotNull(result);
+            assertTrue(result.isEmpty());
+            
+            // Проверяем, что методы были вызваны нужное количество раз
+            verify(userServiceClient, times(1)).getUserByEmail(userEmail, authToken);
+            verify(orderRepository, times(1)).findAllByUserId(testUser.getId());
+        }
+    }
+
 }

@@ -563,5 +563,100 @@ class OrderServiceIntegrationTest extends BaseIntegrationTest {
             orderService.deleteOrder(nonExistentOrderId, adminAuthentication); //Вызываем метод deleteOrder и проверяем, что выбрасывается исключение OrderNotFoundException
         });
     }
+
+    /**
+     * Интеграционный тест успешного получения заказов текущего пользователя.
+     * Проверяет полный стек: извлечение email из токена -> получение пользователя -> поиск заказов в БД.
+     */
+    @DisplayName("getMyOrders_Success - Интеграционный тест получения своих заказов")
+    @Test
+    void getMyOrders_Success() {
+        // given - Создаём несколько заказов в БД для тестового пользователя
+        Order order1 = new Order();
+        order1.setUserId(testUser.getId());
+        order1.setStatus(OrderStatus.NEW);
+        order1.setCreation_date(LocalDateTime.now());
+        final Order savedOrder1 = orderRepository.save(order1);
+
+        Order order2 = new Order();
+        order2.setUserId(testUser.getId());
+        order2.setStatus(OrderStatus.PROCESSING);
+        order2.setCreation_date(LocalDateTime.now());
+        final Order savedOrder2 = orderRepository.save(order2);
+
+        // Создаём заказ для другого пользователя (не должен попасть в результат)
+        Order otherUserOrder = new Order();
+        otherUserOrder.setUserId(999L); // Другой пользователь
+        otherUserOrder.setStatus(OrderStatus.NEW);
+        otherUserOrder.setCreation_date(LocalDateTime.now());
+        final Order savedOtherUserOrder = orderRepository.save(otherUserOrder);
+
+        String authToken = "Bearer test-token";
+
+        // Мокируем получение пользователя из User Service
+        when(userServiceClient.getUserByEmail(eq("test@example.com"), eq(authToken))).thenReturn(testUser);
+
+        // Мокируем SecurityUtils
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            // Email из токена
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getEmailFromToken(userAuthentication))
+                    .thenReturn("test@example.com");
+            // Токен для передачи в user-service
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(userAuthentication))
+                    .thenReturn(authToken);
+
+            // when - Выполнение метода
+            List<OrderWithUserDto> result = orderService.getMyOrders(userAuthentication);
+
+            // then - Проверка результатов
+            assertNotNull(result);
+            assertEquals(2, result.size()); // Только заказы тестового пользователя
+            assertTrue(result.stream().anyMatch(o -> o.getOrder().getId().equals(savedOrder1.getId())));
+            assertTrue(result.stream().anyMatch(o -> o.getOrder().getId().equals(savedOrder2.getId())));
+            assertTrue(result.stream().noneMatch(o -> o.getOrder().getId().equals(savedOtherUserOrder.getId()))); // Заказ другого пользователя не должен быть в результате
+            
+            // Проверяем, что данные пользователя корректны
+            assertEquals(testUser.getId(), result.get(0).getUser().getId());
+            assertEquals("test@example.com", result.get(0).getUser().getEmail());
+            
+            // Проверяем вызов UserServiceClient
+            verify(userServiceClient, times(1)).getUserByEmail(eq("test@example.com"), eq(authToken));
+        }
+    }
+
+    /**
+     * Интеграционный тест получения заказов текущего пользователя, когда заказов нет.
+     */
+    @DisplayName("getMyOrders_EmptyList - Интеграционный тест получения своих заказов, когда заказов нет")
+    @Test
+    void getMyOrders_EmptyList() {
+        // given - БД пуста (заказов нет)
+        String authToken = "Bearer test-token";
+
+        // Мокируем получение пользователя из User Service
+        when(userServiceClient.getUserByEmail(eq("test@example.com"), eq(authToken))).thenReturn(testUser);
+
+        // Мокируем SecurityUtils
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            // Email из токена
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getEmailFromToken(userAuthentication))
+                    .thenReturn("test@example.com");
+            // Токен для передачи в user-service
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(userAuthentication))
+                    .thenReturn(authToken);
+
+            // when - Выполнение метода
+            List<OrderWithUserDto> result = orderService.getMyOrders(userAuthentication);
+
+            // then - Проверка результатов
+            assertNotNull(result);
+            assertTrue(result.isEmpty());
+            
+            // Проверяем вызов UserServiceClient
+            verify(userServiceClient, times(1)).getUserByEmail(eq("test@example.com"), eq(authToken));
+        }
+    }
 }
 

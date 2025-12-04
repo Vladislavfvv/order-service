@@ -62,6 +62,13 @@ public class SecurityConfig {
                         // Эндпоинт для получения заказов текущего пользователя - доступен USER и ADMIN
                         .requestMatchers(HttpMethod.GET, "/api/v1/orders/my").hasAnyRole("ADMIN", "USER")
                         
+                        // Эндпоинты для получения заказов по ID и статусам - доступны USER и ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/v1/orders/ids", "/api/v1/orders/statuses").hasAnyRole("ADMIN", "USER")
+                        
+                        // Эндпоинт для получения заказа по ID - USER может получить только свой заказ, ADMIN - любой
+                        // Проверка доступа выполняется в OrderService
+                        .requestMatchers(HttpMethod.GET, "/api/v1/orders/{id}").hasAnyRole("ADMIN", "USER")
+                        
                         // Эндпоинт для создания заказов из токена - требует аутентификации
                         .requestMatchers(HttpMethod.POST, "/api/v1/orders").hasAnyRole("ADMIN", "USER")
                         
@@ -71,9 +78,6 @@ public class SecurityConfig {
                         
                         // Эндпоинт для удаления заказов - только ADMIN(USER не может удалять заказы - получит 403 Forbidden)
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/orders/**").hasRole("ADMIN")
-                        
-                        // Остальные эндпоинты требуют аутентификации (проверка доступа в контроллерах)
-                        .requestMatchers("/api/v1/orders/**", "/api/v1/orders/ids", "/api/v1/orders/statuses").hasAnyRole("ADMIN", "USER")
                         
                         .anyRequest().authenticated()
                 )
