@@ -93,13 +93,59 @@ public class OrderService {
         return new OrderWithUserDto(orderDto, user);
     }
 
+    /**
+     * Получает заказ по ID.
+     * ADMIN: может получить любой заказ.
+     * USER: может получить только свой заказ.
+     * 
+     * @param id ID заказа
+     * @param authentication объект аутентификации для проверки прав доступа
+     * @return заказ с информацией о пользователе
+     * @throws AccessDeniedException если пользователь пытается получить чужой заказ
+     */
     @Transactional(readOnly = true)
-    public OrderWithUserDto getOrderById(Long id, String authToken) {
+    public OrderWithUserDto getOrderById(Long id, Authentication authentication) {
         log.info("Getting order by ID: {}", id);
+
+        if (authentication == null) {
+            throw new IllegalStateException("Authentication is required");
+        }
 
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
 
+        // Проверка прав доступа: пользователь может получить только свой заказ, ADMIN - любой
+        if (!SecurityUtils.isAdmin(authentication)) {
+            // Извлекаем email текущего пользователя из токена
+            String userEmail = SecurityUtils.getEmailFromToken(authentication);
+            
+            // Извлекаем токен для получения информации о владельце заказа
+            String authToken = SecurityUtils.getTokenString(authentication);
+            
+            // Получаем информацию о владельце заказа
+            Long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
+            UserDto orderOwner = getUserInfo(orderOwnerId, authToken);
+            String orderOwnerEmail = orderOwner.getEmail();
+            
+            if (orderOwnerEmail == null || orderOwnerEmail.isBlank()) {
+                log.warn("Email not found for order owner userId: {}", orderOwnerId);
+                throw new IllegalStateException("Cannot verify order ownership: email not found for order owner");
+            }
+            
+            // Проверяем, что текущий пользователь является владельцем заказа
+            if (!userEmail.equals(orderOwnerEmail)) {
+                log.warn("User {} attempted to get order {} owned by {}", userEmail, id, orderOwnerEmail);
+                throw new AccessDeniedException("Access denied: You can only access your own orders");
+            }
+            
+            log.info("User {} is accessing their own order {}", userEmail, id);
+        } else {
+            log.info("ADMIN user {} is accessing order {}", authentication.getName(), id);
+        }
+
+        // Извлекаем токен для получения информации о пользователе
+        String authToken = SecurityUtils.getTokenString(authentication);
+        
         // Получаем email владельца заказа через userId, затем используем email для получения user info
         return getOrderWithUserDto(authToken, order);
     }

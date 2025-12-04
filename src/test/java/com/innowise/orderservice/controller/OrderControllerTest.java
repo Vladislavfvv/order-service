@@ -146,9 +146,45 @@ class OrderControllerTest {
      * 4. Возвращает HTTP 200 OK
      * 5. Возвращает OrderWithUserDto с информацией о заказе и пользователе
      */
-    @DisplayName("getOrderById_Success - Получение заказа по ID успешно")
+    @DisplayName("getOrderById_Success - Получение своего заказа по ID успешно")
     @Test
     void getOrderById_Success() throws Exception {
+        // given - Подготовка тестовых данных
+        Long orderId = 1L;
+        String userEmail = "user@example.com";
+
+        // when - Настройка моков
+        when(orderService.getOrderById(eq(orderId), any())).thenReturn(orderWithUserDto);
+
+        // then - Выполнение запроса и проверка результатов
+        mockMvc.perform(get("/api/v1/orders/{id}", orderId)
+                        .with(jwt().jwt(jwt -> jwt.subject(userEmail).claim("role", "ROLE_USER"))))
+                .andExpect(status().isOk()) // Проверяем HTTP статус 200
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON)) // Проверяем тип контента
+                .andExpect(jsonPath("$.order.id").value(orderId)) // Проверяем ID заказа
+                .andExpect(jsonPath("$.user.id").value(1L)); // Проверяем ID пользователя
+    }
+
+    @DisplayName("getOrderById_AccessDenied - Обычный пользователь не может получить чужой заказ")
+    @Test
+    void getOrderById_AccessDenied() throws Exception {
+        // given - Подготовка тестовых данных
+        Long orderId = 1L;
+        String userEmail = "user@example.com";
+
+        // when - Настройка моков - выбрасываем AccessDeniedException при попытке получить чужой заказ
+        when(orderService.getOrderById(eq(orderId), any()))
+                .thenThrow(new org.springframework.security.access.AccessDeniedException("Access denied: You can only access your own orders"));
+
+        // then - Выполнение запроса и проверка результатов
+        mockMvc.perform(get("/api/v1/orders/{id}", orderId)
+                        .with(jwt().jwt(jwt -> jwt.subject(userEmail).claim("role", "ROLE_USER"))))
+                .andExpect(status().isForbidden()); // Проверяем HTTP статус 403 Forbidden
+    }
+
+    @DisplayName("getOrderById_Success_Admin - Админ может получить любой заказ")
+    @Test
+    void getOrderById_Success_Admin() throws Exception {
         // given - Подготовка тестовых данных
         Long orderId = 1L;
 
@@ -157,7 +193,7 @@ class OrderControllerTest {
 
         // then - Выполнение запроса и проверка результатов
         mockMvc.perform(get("/api/v1/orders/{id}", orderId)
-                        .with(jwt().jwt(jwt -> jwt.subject("user@example.com").claim("role", "ROLE_USER"))))
+                        .with(jwt().jwt(jwt -> jwt.subject("admin@example.com").claim("role", "ROLE_ADMIN"))))
                 .andExpect(status().isOk()) // Проверяем HTTP статус 200
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON)) // Проверяем тип контента
                 .andExpect(jsonPath("$.order.id").value(orderId)) // Проверяем ID заказа

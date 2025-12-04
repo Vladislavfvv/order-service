@@ -270,25 +270,29 @@ class OrderServiceTest {
     }
 
     /**
-     * Тест успешного получения заказа по ID.
+     * Тест успешного получения заказа по ID владельцем заказа.
      * Проверяет, что метод getOrderById:
      * 1. Находит заказ в репозитории по ID
-     * 2. Получает информацию о пользователе сначала по userId (для получения email)
-     * 3. Затем получает полную информацию о пользователе по email
-     * 4. Преобразует Order в OrderDto через mapper
-     * 5. Возвращает OrderWithUserDto с информацией о заказе и пользователе
+     * 2. Проверяет права доступа (пользователь является владельцем заказа)
+     * 3. Получает информацию о пользователе сначала по userId (для получения email)
+     * 4. Затем получает полную информацию о пользователе по email
+     * 5. Преобразует Order в OrderDto через mapper
+     * 6. Возвращает OrderWithUserDto с информацией о заказе и пользователе
      */
-    @DisplayName("findUserById_Positive - Все ок)")
+    @DisplayName("getOrderById_Exists_ReturnOrderWithUserDto - Получение своего заказа успешно")
     @Test
     void getOrderById_Exists_ReturnOrderWithUserDto() {
         //given - Подготовка тестовых данных
         Long orderId = 1L;
-        String authToken = "Bearer mock-token";
         String userEmail = "testEmail@email.com";
+        String authToken = "Bearer mock-token";
 
         // Создаём тестового пользователя
         UserDto testUser = new UserDto(1L, "testUserName", "testSurname",
                 LocalDate.of(2000, 1, 1), userEmail);
+
+        // Создаём mock authentication для владельца заказа
+        JwtAuthenticationToken authentication = createMockAuthentication(userEmail, "USER");
 
         // Создаём DTO для элементов заказа
         OrderItemDto orderItemDto1 = new OrderItemDto();
@@ -335,18 +339,143 @@ class OrderServiceTest {
         // Затем мокируем получение пользователя по email (основной вызов)
         when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser); 
 
-        // Вызываем тестируемый метод
-        OrderWithUserDto result = orderService.getOrderById(orderId, authToken); 
+        // Мокируем SecurityUtils для проверки доступа
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            // Пользователь не админ
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.isAdmin(authentication))
+                    .thenReturn(false);
+            // Email из токена совпадает с email владельца заказа
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getEmailFromToken(authentication))
+                    .thenReturn(userEmail);
+            // Токен для передачи в user-service
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(authentication))
+                    .thenReturn(authToken);
 
-        //then - Проверка результатов
-        assertNotNull(result); //Проверяем, что результат не null
-        assertNotNull(result.getOrder()); //Проверяем, что заказ не null
-        assertNotNull(result.getUser()); //Проверяем, что пользователь не null
-        // Проверяем, что ID заказа соответствует ожидаемому
-        assertEquals(orderId, result.getOrder().getId()); 
-        // Проверяем, что данные пользователя корректны
-        assertEquals(testUser.getId(), result.getUser().getId()); //Проверяем, что ID пользователя совпадает с ID пользователя в заказе
-        assertEquals(userEmail, result.getUser().getEmail()); //Проверяем, что email пользователя совпадает с email пользователя в заказе
+            // Вызываем тестируемый метод
+            OrderWithUserDto result = orderService.getOrderById(orderId, authentication); 
+
+            //then - Проверка результатов
+            assertNotNull(result); //Проверяем, что результат не null
+            assertNotNull(result.getOrder()); //Проверяем, что заказ не null
+            assertNotNull(result.getUser()); //Проверяем, что пользователь не null
+            // Проверяем, что ID заказа соответствует ожидаемому
+            assertEquals(orderId, result.getOrder().getId()); 
+            // Проверяем, что данные пользователя корректны
+            assertEquals(testUser.getId(), result.getUser().getId()); //Проверяем, что ID пользователя совпадает с ID пользователя в заказе
+            assertEquals(userEmail, result.getUser().getEmail()); //Проверяем, что email пользователя совпадает с email пользователя в заказе
+        }
+    }
+
+    /**
+     * Тест проверки прав доступа при получении чужого заказа.
+     * Проверяет, что метод getOrderById:
+     * 1. Находит заказ в репозитории по ID
+     * 2. Проверяет права доступа (пользователь НЕ является владельцем заказа)
+     * 3. Выбрасывает AccessDeniedException, если пользователь пытается получить чужой заказ
+     * 4. Не возвращает заказ при отсутствии прав доступа
+     */
+    @DisplayName("getOrderById_AccessDenied_OtherUserOrder - Обычный пользователь не может получить чужой заказ")
+    @Test
+    void getOrderById_AccessDenied_OtherUserOrder() {
+        //given - Подготовка тестовых данных
+        Long orderId = 1L;
+        String userEmail = "user@example.com"; // Email текущего пользователя
+        String orderOwnerEmail = "owner@example.com"; // Email владельца заказа
+        String authToken = "Bearer mock-token";
+
+        // Создаём тестового пользователя (владельца заказа)
+        UserDto orderOwner = new UserDto(1L, "Owner", "User",
+                LocalDate.of(2000, 1, 1), orderOwnerEmail);
+
+        // Создаём mock authentication для текущего пользователя (не владельца)
+        JwtAuthenticationToken authentication = createMockAuthentication(userEmail, "USER");
+
+        //when - Настройка моков
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(userServiceClient.getUserById(orderOwner.getId(), authToken)).thenReturn(orderOwner);
+
+        // Мокируем SecurityUtils для проверки доступа
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            // Пользователь не админ
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.isAdmin(authentication))
+                    .thenReturn(false);
+            // Email из токена НЕ совпадает с email владельца заказа
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getEmailFromToken(authentication))
+                    .thenReturn(userEmail);
+            // Токен для передачи в user-service
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(authentication))
+                    .thenReturn(authToken);
+
+            //then - Проверка, что выбрасывается исключение AccessDeniedException
+            assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> {
+                orderService.getOrderById(orderId, authentication);
+            });
+
+            // Проверяем, что поиск заказа был выполнен
+            verify(orderRepository, times(1)).findById(orderId);
+        }
+    }
+
+    /**
+     * Тест успешного получения заказа по ID администратором.
+     * Проверяет, что метод getOrderById:
+     * 1. Находит заказ в репозитории по ID
+     * 2. Проверяет права доступа (пользователь является ADMIN)
+     * 3. Админ может получить любой заказ (проверка доступа пропускается)
+     * 4. Возвращает OrderWithUserDto с информацией о заказе и пользователе
+     */
+    @DisplayName("getOrderById_Success_Admin - Админ может получить любой заказ")
+    @Test
+    void getOrderById_Success_Admin() {
+        //given - Подготовка тестовых данных
+        Long orderId = 1L;
+        String orderOwnerEmail = "owner@example.com";
+        String authToken = "Bearer mock-token";
+
+        // Создаём тестового пользователя (владельца заказа)
+        UserDto orderOwner = new UserDto(1L, "Owner", "User",
+                LocalDate.of(2000, 1, 1), orderOwnerEmail);
+
+        // Создаём mock authentication для администратора
+        JwtAuthenticationToken authentication = createMockAuthentication("admin@example.com", "ADMIN");
+
+        // Создаём ожидаемый OrderDto
+        OrderDto orderDto = new OrderDto();
+        orderDto.setId(orderId);
+        orderDto.setUserId(orderOwner.getId());
+        orderDto.setStatus(OrderStatus.NEW);
+        orderDto.setCreationDate(LocalDateTime.now());
+        orderDto.setItemDtoList(new ArrayList<>());
+
+        //when - Настройка моков и выполнение метода
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderMapper.toDto(order)).thenReturn(orderDto);
+        when(userServiceClient.getUserById(orderOwner.getId(), authToken)).thenReturn(orderOwner);
+        when(userServiceClient.getUserByEmail(orderOwnerEmail, authToken)).thenReturn(orderOwner);
+
+        // Мокируем SecurityUtils для проверки доступа
+        try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
+                org.mockito.Mockito.mockStatic(com.innowise.orderservice.util.SecurityUtils.class)) {
+            // Пользователь является админом
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.isAdmin(authentication))
+                    .thenReturn(true);
+            // Токен для передачи в user-service
+            mockedSecurityUtils.when(() -> com.innowise.orderservice.util.SecurityUtils.getTokenString(authentication))
+                    .thenReturn(authToken);
+
+            // Вызываем тестируемый метод
+            OrderWithUserDto result = orderService.getOrderById(orderId, authentication);
+
+            //then - Проверка результатов
+            assertNotNull(result);
+            assertNotNull(result.getOrder());
+            assertNotNull(result.getUser());
+            assertEquals(orderId, result.getOrder().getId());
+            assertEquals(orderOwner.getId(), result.getUser().getId());
+            assertEquals(orderOwnerEmail, result.getUser().getEmail());
+        }
     }
 
     /**
@@ -361,8 +490,10 @@ class OrderServiceTest {
     void getOrderById_NotFound_ThrowsException() {
         // given - Подготовка тестовых данных
         Long orderId = 1L;
-        String authToken = "test-token";
         String expectedMessage = "Order not found: " + orderId;
+        
+        // Создаём mock authentication
+        JwtAuthenticationToken authentication = createMockAuthentication("user@example.com", "USER");
         
         // Мокируем ситуацию, когда заказ не найден (пустой Optional)
         // Это имитирует ситуацию, когда order с таким ID не существует в базе данных
@@ -371,7 +502,7 @@ class OrderServiceTest {
         // when & then - Проверка, что метод выбросит исключение
         OrderNotFoundException exception = assertThrows(
                 OrderNotFoundException.class,
-                () -> orderService.getOrderById(orderId, authToken) 
+                () -> orderService.getOrderById(orderId, authentication) 
         );
 
         // Проверка: что текст сообщения исключения соответствует ожидаемому

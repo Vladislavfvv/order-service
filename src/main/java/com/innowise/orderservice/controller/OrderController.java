@@ -103,14 +103,23 @@ public class OrderController {
         return ResponseEntity.ok(orders);
     }
 
+    /**
+     * Получает заказ по ID.
+     * ADMIN: может получить любой заказ.
+     * USER: может получить только свой заказ.
+     * 
+     * @param id ID заказа
+     * @param authentication объект аутентификации для проверки прав доступа
+     * @return заказ с информацией о пользователе
+     */
     @GetMapping("/{id}")
     public ResponseEntity<OrderWithUserDto> getOrderById(
             @PathVariable Long id,
             Authentication authentication) {
         log.info("Getting order by ID: {}", id);
         
-        String authToken = getAuthToken(authentication);
-        OrderWithUserDto order = orderService.getOrderById(id, authToken);
+        // Передаем Authentication для проверки прав доступа в сервисе
+        OrderWithUserDto order = orderService.getOrderById(id, authentication);
         return ResponseEntity.ok(order);
     }
 
