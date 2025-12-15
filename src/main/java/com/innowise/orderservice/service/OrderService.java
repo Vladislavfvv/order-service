@@ -26,6 +26,7 @@ import com.innowise.orderservice.model.Item;
 import com.innowise.orderservice.model.Order;
 import com.innowise.orderservice.model.OrderItem;
 import com.innowise.orderservice.model.OrderStatus;
+import com.innowise.orderservice.producer.OrderEventProducer;
 import com.innowise.orderservice.repository.ItemRepository;
 import com.innowise.orderservice.repository.OrderRepository;
 import com.innowise.orderservice.util.SecurityUtils;
@@ -43,6 +44,7 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final OrderItemMapper orderItemMapper;
     private final UserServiceClient userServiceClient;
+    private final OrderEventProducer orderEventProducer;
 
     @Transactional
     public OrderWithUserDto createOrder(CreateOrderRequest request, Authentication authentication) {
@@ -87,6 +89,14 @@ public class OrderService {
         
         // Сохраняем заказ (cascade сохранит orderItems)
         final Order savedOrder = orderRepository.save(order);
+
+        // Send CREATE_ORDER event to Kafka
+        try {
+            orderEventProducer.sendCreateOrderEvent(savedOrder);
+        } catch (Exception e) {
+            log.error("Failed to send CREATE_ORDER event to Kafka for orderId: {}", savedOrder.getId(), e);
+            // Continue execution even if Kafka event fails
+        }
 
         // Возвращаем заказ с информацией о пользователе (уже полученной выше)
         OrderDto orderDto = orderMapper.toDto(savedOrder);
@@ -441,5 +451,31 @@ public class OrderService {
             return new UserDto(null, "Unknown", "User", null, email);
         }
     }
+
+
+    @Transactional
+public void updateOrderStatus(String orderId, String status) {
+    log.info("Updating order status from Kafka event: orderId={}, status={}", orderId, status);
+
+    Long id;
+    try {
+        id = Long.parseLong(orderId);
+    } catch (NumberFormatException e) {
+        log.error("Invalid orderId in payment event: {}", orderId, e);
+        return; // или можно бросить исключение
+    }
+
+    Order order = orderRepository.findById(id)
+            .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
+
+    try {
+        OrderStatus newStatus = OrderStatus.valueOf(status);
+        order.setStatus(newStatus);
+        orderRepository.save(order);
+        log.info("Order {} status updated to {} from Kafka event", id, newStatus);
+    } catch (IllegalArgumentException e) {
+        log.error("Unknown order status '{}' in payment event for orderId={}", status, id, e);
+    }
+}
 }
 

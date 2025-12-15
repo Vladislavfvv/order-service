@@ -41,6 +41,9 @@ services:
 
       # Конфигурация user-service для вызовов из UserServiceClient (WebClient)
       USER_SERVICE_URL: http://user-service:8080
+      
+      # Kafka Configuration
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9093
     ports:
       - "8083:8080"
     networks:
