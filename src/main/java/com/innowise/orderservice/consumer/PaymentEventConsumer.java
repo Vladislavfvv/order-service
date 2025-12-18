@@ -27,13 +27,23 @@ public class PaymentEventConsumer {
     /**
      * Handle CREATE_PAYMENT event from Kafka
      */
-    @KafkaListener(topics = CREATE_PAYMENT_TOPIC, groupId = GROUP_ID)
+    @KafkaListener(topics = CREATE_PAYMENT_TOPIC, groupId = GROUP_ID, containerFactory = "paymentEventKafkaListenerContainerFactory")
     public void handleCreatePaymentEvent(
             @Payload CreatePaymentEvent event,            
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
         
         try {
+            // ErrorHandlingDeserializer может вернуть null при ошибке десериализации
+            if (event == null) {
+                log.warn("Received null CREATE_PAYMENT event at offset {}, skipping (likely deserialization error from old message format)", offset);
+                // Acknowledge чтобы пропустить проблемное сообщение
+                if (acknowledgment != null) {
+                    acknowledgment.acknowledge();
+                }
+                return;
+            }
+            
             log.info("Received CREATE_PAYMENT event: orderId={}, status={}, offset={}", 
                     event.getOrderId(), event.getStatus(), offset);
             
@@ -47,7 +57,8 @@ public class PaymentEventConsumer {
             
             log.info("Successfully processed CREATE_PAYMENT event for orderId: {}", event.getOrderId());
         } catch (Exception e) {
-            log.error("Error processing CREATE_PAYMENT event for orderId: {}", event.getOrderId(), e);
+            log.error("Error processing CREATE_PAYMENT event for orderId: {}", 
+                    event != null ? event.getOrderId() : "null", e);
             throw e;
         }
     }

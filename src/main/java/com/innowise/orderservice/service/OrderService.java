@@ -469,10 +469,11 @@ public void updateOrderStatus(String orderId, String status) {
             .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
 
     try {
-        OrderStatus newStatus = OrderStatus.valueOf(status);
+        // Теперь OrderStatus содержит SUCCESS и FAILED, поэтому можно напрямую конвертировать
+        OrderStatus newStatus = OrderStatus.valueOf(status.toUpperCase());
         order.setStatus(newStatus);
         orderRepository.save(order);
-        log.info("Order {} status updated to {} from Kafka event", id, newStatus);
+        log.info("Order {} status updated to {} from payment event (Kafka)", id, newStatus);
     } catch (IllegalArgumentException e) {
         log.error("Unknown order status '{}' in payment event for orderId={}", status, id, e);
     }
