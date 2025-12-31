@@ -121,7 +121,8 @@ public class OrderService {
             throw new IllegalStateException("Authentication is required");
         }
 
-        Order order = orderRepository.findById(id)
+        // Загружаем заказ с товарами (items) для корректного отображения
+        Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
 
         // Проверка прав доступа: пользователь может получить только свой заказ, ADMIN - любой
@@ -170,7 +171,22 @@ public class OrderService {
         }
         UserDto user = getUserInfoByEmail(email, authToken);
 
+        // Логируем информацию о товарах перед маппингом
+        if (order.getItems() != null) {
+            log.debug("Order ID: {} has {} items before mapping", order.getId(), order.getItems().size());
+        } else {
+            log.warn("Order ID: {} has null items collection before mapping", order.getId());
+        }
+
         OrderDto orderDto = orderMapper.toDto(order);
+        
+        // Логируем результат маппинга
+        if (orderDto.getItemDtoList() != null) {
+            log.debug("OrderDto ID: {} has {} items after mapping", orderDto.getId(), orderDto.getItemDtoList().size());
+        } else {
+            log.warn("OrderDto ID: {} has null itemDtoList after mapping", orderDto.getId());
+        }
+        
         return new OrderWithUserDto(orderDto, user);
     }
 
@@ -238,21 +254,37 @@ public class OrderService {
         log.info("Getting all orders");
 
         List<Order> orders = orderRepository.findAll();
+        log.info("Found {} orders in database", orders.size());
+
+        if (orders.isEmpty()) {
+            log.warn("No orders found in database");
+            return List.of();
+        }
 
         return orders.stream()
                 .map(order -> {
-                    long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
-                    UserDto tempUser = getUserInfo(orderOwnerId, authToken);
-                    String email = tempUser.getEmail();
-                    UserDto user;
-                    if (email == null || email.isBlank()) {
-                        log.warn("Email not found for userId: {}, using tempUser directly", orderOwnerId);
-                        user = tempUser;
-                    } else {
-                        user = getUserInfoByEmail(email, authToken);
+                    try {
+                        long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
+                        log.debug("Processing order ID: {}, userId: {}", order.getId(), orderOwnerId);
+                        
+                        UserDto tempUser = getUserInfo(orderOwnerId, authToken);
+                        String email = tempUser.getEmail();
+                        UserDto user;
+                        if (email == null || email.isBlank()) {
+                            log.warn("Email not found for userId: {}, using tempUser directly", orderOwnerId);
+                            user = tempUser;
+                        } else {
+                            user = getUserInfoByEmail(email, authToken);
+                        }
+                        OrderDto orderDto = orderMapper.toDto(order);
+                        return new OrderWithUserDto(orderDto, user);
+                    } catch (Exception e) {
+                        log.error("Error processing order ID: {}", order.getId(), e);
+                        // Возвращаем заказ с fallback пользователем вместо того, чтобы пропустить его
+                        OrderDto orderDto = orderMapper.toDto(order);
+                        UserDto fallbackUser = new UserDto(order.getUserId(), "Unknown", "User", null, null);
+                        return new OrderWithUserDto(orderDto, fallbackUser);
                     }
-                    OrderDto orderDto = orderMapper.toDto(order);
-                    return new OrderWithUserDto(orderDto, user);
                 })
                 .collect(Collectors.toList());
     }
@@ -359,8 +391,18 @@ public class OrderService {
     public OrderWithUserDto updateOrder(Long id, UpdateOrderRequest request, Authentication authentication) {
         log.info("Updating order ID: {} with status: {}", id, request.getStatus());
 
-        Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
+        log.info("Attempting to find order with ID: {}", id);
+        var orderOptional = orderRepository.findById(id);
+        if (orderOptional.isEmpty()) {
+            long totalOrders = orderRepository.count();
+            log.error("Order with ID {} not found in database. Total orders in database: {}", id, totalOrders);
+            // Попробуем найти все заказы с похожими ID для отладки
+            List<Order> allOrders = orderRepository.findAll();
+            log.error("Available order IDs: {}", allOrders.stream().map(Order::getId).collect(Collectors.toList()));
+            throw new OrderNotFoundException("Order not found: " + id);
+        }
+        Order order = orderOptional.get();
+        log.info("Order found: ID={}, userId={}, status={}", order.getId(), order.getUserId(), order.getStatus());
 
         // Проверка прав доступа: пользователь может обновлять только свои заказы, ADMIN - любые
         if (authentication == null) {
@@ -396,15 +438,36 @@ public class OrderService {
             log.info("ADMIN user {} is updating order {}", authentication.getName(), id);
         }
 
+        // Сохраняем старый статус для логирования
+        OrderStatus oldStatus = order.getStatus();
+        OrderStatus newStatus = request.getStatus();
+        
         // Обновляем статус заказа
-        order.setStatus(request.getStatus());
+        order.setStatus(newStatus);
         final Order savedOrder = orderRepository.save(order);
+        
+        // Логируем изменение статуса
+        log.info("Order ID: {} status changed from {} to {}", savedOrder.getId(), oldStatus, newStatus);
+        log.info("Order ID: {} successfully updated. New status: {}", savedOrder.getId(), savedOrder.getStatus());
+        
+        // Перезагружаем заказ с товарами (items) для корректного маппинга
+        // Используем специальный метод с EntityGraph для загрузки LAZY коллекции items
+        Order orderWithItems = orderRepository.findByIdWithItems(savedOrder.getId())
+                .orElseThrow(() -> new OrderNotFoundException("Order not found after update: " + savedOrder.getId()));
+        
+        // Логируем информацию о товарах
+        if (orderWithItems.getItems() != null && !orderWithItems.getItems().isEmpty()) {
+            int itemsCount = orderWithItems.getItems().size();
+            log.info("Order ID: {} contains {} items", orderWithItems.getId(), itemsCount);
+        } else {
+            log.warn("Order ID: {} has no items (empty collection)", orderWithItems.getId());
+        }
 
         // Извлекаем токен для получения информации о пользователе
         String authToken = SecurityUtils.getTokenString(authentication);
         
         // Получаем email владельца заказа через userId, затем используем email для получения user info
-        return getOrderWithUserDto(authToken, savedOrder);
+        return getOrderWithUserDto(authToken, orderWithItems);
     }
 
     /**
