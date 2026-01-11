@@ -280,19 +280,27 @@ class OrderControllerIntegrationTest extends BaseIntegrationTest {
     /**
      * Интеграционный тест проверки прав доступа при удалении заказа обычным пользователем.
      */
-    @DisplayName("deleteOrder_Forbidden_User - Обычный пользователь не может удалять заказы")
+    @DisplayName("deleteOrder_Forbidden_User - Обычный пользователь не может удалять чужие заказы")
     @Test
     void deleteOrder_Forbidden_User() throws Exception {
-        // given - Используем существующий заказ из setUp
+        // given - Создаем заказ, принадлежащий другому пользователю
+        UserDto otherUser = new UserDto(2L, "Other", "User", LocalDate.of(1990, 5, 15), "other@example.com");
+        when(userServiceClient.getUserByEmail(eq("other@example.com"), any())).thenReturn(otherUser);
+        
+        Order otherUserOrder = new Order();
+        otherUserOrder.setUserId(otherUser.getId()); // Заказ принадлежит другому пользователю
+        otherUserOrder.setStatus(OrderStatus.NEW);
+        otherUserOrder.setCreation_date(LocalDateTime.now());
+        otherUserOrder = orderRepository.save(otherUserOrder);
 
-        // when & then - Выполнение HTTP запроса и проверка ошибки доступа
-        mockMvc.perform(delete("/api/v1/orders/{id}", testOrder.getId())
+        // when & then - Пытаемся удалить чужой заказ от имени test@example.com
+        mockMvc.perform(delete("/api/v1/orders/{id}", otherUserOrder.getId())
                         .with(jwt().jwt(jwt -> jwt.subject("test@example.com"))
                                 .authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden()); // Проверяем HTTP статус 403
 
         // Проверяем, что заказ НЕ был удален из БД
-        assertTrue(orderRepository.findById(testOrder.getId()).isPresent()); //Проверяем, что заказ есть в БД
+        assertTrue(orderRepository.findById(otherUserOrder.getId()).isPresent()); // Проверяем, что заказ есть в БД
     }
 
     /**
