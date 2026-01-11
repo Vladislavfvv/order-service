@@ -1,6 +1,7 @@
 package com.innowise.orderservice.service;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -173,7 +174,7 @@ public class OrderService {
 
         // Логируем информацию о товарах перед маппингом
         if (order.getItems() != null) {
-            log.debug("Order ID: {} has {} items before mapping", order.getId(), order.getItems().size());
+            log.info("Order ID: {} has {} items before mapping", order.getId(), order.getItems().size());
         } else {
             log.warn("Order ID: {} has null items collection before mapping", order.getId());
         }
@@ -182,7 +183,7 @@ public class OrderService {
         
         // Логируем результат маппинга
         if (orderDto.getItemDtoList() != null) {
-            log.debug("OrderDto ID: {} has {} items after mapping", orderDto.getId(), orderDto.getItemDtoList().size());
+            log.info("OrderDto ID: {} has {} items after mapping", orderDto.getId(), orderDto.getItemDtoList().size());
         } else {
             log.warn("OrderDto ID: {} has null itemDtoList after mapping", orderDto.getId());
         }
@@ -197,7 +198,8 @@ public class OrderService {
         // Извлекаем токен для передачи в user-service
         String authToken = SecurityUtils.getTokenString(authentication);
 
-        List<Order> orders = orderRepository.findAllByIdIn(ids);
+        // Используем метод с EntityGraph для загрузки items
+        List<Order> orders = orderRepository.findAllByIdInWithItems(ids);
         
         // Если пользователь не админ, фильтруем заказы - показываем только свои
         if (!SecurityUtils.isAdmin(authentication)) {
@@ -253,7 +255,8 @@ public class OrderService {
     public List<OrderWithUserDto> getAllOrders(String authToken) {
         log.info("Getting all orders");
 
-        List<Order> orders = orderRepository.findAll();
+        // Используем метод с EntityGraph для загрузки items
+        List<Order> orders = orderRepository.findAllWithItems();
         log.info("Found {} orders in database", orders.size());
 
         if (orders.isEmpty()) {
@@ -261,7 +264,17 @@ public class OrderService {
             return List.of();
         }
 
+        // Логируем информацию о загруженных items
+        orders.forEach(order -> {
+            if (order.getItems() != null && !order.getItems().isEmpty()) {
+                log.info("Order ID: {} has {} items loaded", order.getId(), order.getItems().size());
+            } else {
+                log.warn("Order ID: {} has no items (empty or null)", order.getId());
+            }
+        });
+
         return orders.stream()
+                .sorted(Comparator.comparing(Order::getId)) // Сортировка по ID для гарантии правильного порядка
                 .map(order -> {
                     try {
                         long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
@@ -277,6 +290,14 @@ public class OrderService {
                             user = getUserInfoByEmail(email, authToken);
                         }
                         OrderDto orderDto = orderMapper.toDto(order);
+                        
+                        // Логируем результат маппинга
+                        if (orderDto.getItemDtoList() != null && !orderDto.getItemDtoList().isEmpty()) {
+                            log.info("OrderDto ID: {} has {} items after mapping", orderDto.getId(), orderDto.getItemDtoList().size());
+                        } else {
+                            log.warn("OrderDto ID: {} has no items after mapping (empty or null)", orderDto.getId());
+                        }
+                        
                         return new OrderWithUserDto(orderDto, user);
                     } catch (Exception e) {
                         log.error("Error processing order ID: {}", order.getId(), e);
@@ -296,24 +317,33 @@ public class OrderService {
         // Извлекаем токен для передачи в user-service
         String authToken = SecurityUtils.getTokenString(authentication);
 
-        List<Order> orders = orderRepository.findAllByStatusIn(statuses);
+        // Используем метод с EntityGraph для загрузки items
+        List<Order> orders = orderRepository.findAllByStatusInWithItems(statuses);
         
         // Если пользователь не админ, фильтруем заказы - показываем только свои
         if (!SecurityUtils.isAdmin(authentication)) {
             String userEmail = SecurityUtils.getEmailFromToken(authentication);
             log.info("Regular user {} is requesting orders by statuses. Filtering to show only their orders.", userEmail);
             
+            // Сначала получаем информацию о текущем пользователе
+            UserDto currentUser = getUserInfoByEmail(userEmail, authToken);
+            Long currentUserId = currentUser.getId();
+            
+            // Если пользователь не найден в user-service, возвращаем пустой список
+            if (currentUserId == null) {
+                log.warn("User ID not found for email: {}. User may not be synchronized with user-service. Returning empty list.", userEmail);
+                return List.of();
+            }
+            
             // Фильтруем заказы: оставляем только те, которые принадлежат текущему пользователю
             List<Order> filteredOrders = orders.stream()
                     .filter(order -> {
-                        long orderOwnerId = Objects.requireNonNull(order.getUserId(), "Order userId cannot be null");
-                        UserDto orderOwner = getUserInfo(orderOwnerId, authToken);
-                        String orderOwnerEmail = orderOwner.getEmail();
-                        boolean isOwner = userEmail.equals(orderOwnerEmail);
-                        if (!isOwner) {
-                            log.debug("Order {} belongs to {}, not to {}. Filtering out.", order.getId(), orderOwnerEmail, userEmail);
+                        Long orderOwnerId = order.getUserId();
+                        // Пропускаем заказы без userId или с userId, не совпадающим с текущим пользователем
+                        if (orderOwnerId == null || !orderOwnerId.equals(currentUserId)) {
+                            return false;
                         }
-                        return isOwner;
+                        return true;
                     })
                     .collect(Collectors.toList());
             
@@ -361,11 +391,13 @@ public class OrderService {
         UserDto user = getUserInfoByEmail(email, authToken);
         Long userId = user.getId();
         if (userId == null) {
-            throw new IllegalStateException("User ID not found for email: " + email);
+            log.warn("User ID not found for email: {}. User may not be synchronized with user-service. Returning empty list.", email);
+            // Возвращаем пустой список вместо исключения, чтобы не выбрасывать пользователя из аккаунта
+            return List.of();
         }
 
-        // Получаем все заказы пользователя
-        List<Order> orders = orderRepository.findAllByUserId(userId);
+        // Получаем все заказы пользователя с загруженными items
+        List<Order> orders = orderRepository.findAllByUserIdWithItems(userId);
         log.info("Found {} orders for user {}", orders.size(), email);
 
         // Преобразуем заказы в DTO
@@ -391,8 +423,9 @@ public class OrderService {
     public OrderWithUserDto updateOrder(Long id, UpdateOrderRequest request, Authentication authentication) {
         log.info("Updating order ID: {} with status: {}", id, request.getStatus());
 
-        log.info("Attempting to find order with ID: {}", id);
-        var orderOptional = orderRepository.findById(id);
+        log.info("Attempting to find order with ID: {} (with items)", id);
+        // Используем findByIdWithItems сразу для загрузки товаров
+        var orderOptional = orderRepository.findByIdWithItems(id);
         if (orderOptional.isEmpty()) {
             long totalOrders = orderRepository.count();
             log.error("Order with ID {} not found in database. Total orders in database: {}", id, totalOrders);
@@ -402,7 +435,10 @@ public class OrderService {
             throw new OrderNotFoundException("Order not found: " + id);
         }
         Order order = orderOptional.get();
-        log.info("Order found: ID={}, userId={}, status={}", order.getId(), order.getUserId(), order.getStatus());
+        OrderStatus oldStatus = order.getStatus();
+        log.info("Order found: ID={}, userId={}, current status={}, items count={}", 
+                order.getId(), order.getUserId(), oldStatus, 
+                order.getItems() != null ? order.getItems().size() : 0);
 
         // Проверка прав доступа: пользователь может обновлять только свои заказы, ADMIN - любые
         if (authentication == null) {
@@ -438,8 +474,7 @@ public class OrderService {
             log.info("ADMIN user {} is updating order {}", authentication.getName(), id);
         }
 
-        // Сохраняем старый статус для логирования
-        OrderStatus oldStatus = order.getStatus();
+        // Сохраняем новый статус
         OrderStatus newStatus = request.getStatus();
         
         // Обновляем статус заказа
@@ -447,6 +482,7 @@ public class OrderService {
         final Order savedOrder = orderRepository.save(order);
         
         // Логируем изменение статуса
+        log.info("=== ORDER STATUS UPDATE ===");
         log.info("Order ID: {} status changed from {} to {}", savedOrder.getId(), oldStatus, newStatus);
         log.info("Order ID: {} successfully updated. New status: {}", savedOrder.getId(), savedOrder.getStatus());
         
@@ -459,9 +495,15 @@ public class OrderService {
         if (orderWithItems.getItems() != null && !orderWithItems.getItems().isEmpty()) {
             int itemsCount = orderWithItems.getItems().size();
             log.info("Order ID: {} contains {} items", orderWithItems.getId(), itemsCount);
+            log.info("Order items: {}", orderWithItems.getItems().stream()
+                    .map(item -> String.format("ItemId=%d, Quantity=%.2f", 
+                            item.getItem() != null ? item.getItem().getId() : null, 
+                            item.getQuantity()))
+                    .collect(Collectors.joining(", ")));
         } else {
             log.warn("Order ID: {} has no items (empty collection)", orderWithItems.getId());
         }
+        log.info("=== END ORDER STATUS UPDATE ===");
 
         // Извлекаем токен для получения информации о пользователе
         String authToken = SecurityUtils.getTokenString(authentication);
@@ -478,21 +520,66 @@ public class OrderService {
     public void deleteOrder(Long id, Authentication authentication) {
         log.info("Deleting order ID: {} by user: {}", id, authentication != null ? authentication.getName() : "unknown");
 
+        if (authentication == null) {
+            throw new AccessDeniedException("Authentication required to delete order");
+        }
+
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found: " + id));
 
-        // Проверяем, является ли пользователь ADMIN
-        // Дополнительная проверка на уровне сервиса для безопасности (defense in depth)
-        // Основная проверка уже выполнена в SecurityConfig, но это обеспечивает дополнительную защиту
-        if (authentication == null || !SecurityUtils.isAdmin(authentication)) {
-            String userName = authentication != null ? authentication.getName() : "unknown";
-            log.warn("User {} attempted to delete order {} but is not ADMIN", userName, id);
-            throw new AccessDeniedException("Access denied: Only ADMIN users can delete orders");
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
+
+        // Если пользователь не ADMIN, проверяем дополнительные условия:
+        // 1. Заказ должен принадлежать текущему пользователю
+        // 2. Заказ должен быть в статусе NEW (новый заказ без платежей)
+        if (!isAdmin) {
+            String userEmail = SecurityUtils.getEmailFromToken(authentication);
+            String authToken = SecurityUtils.getTokenString(authentication);
+            
+            // Получаем информацию о текущем пользователе по email
+            UserDto currentUser = getUserInfoByEmail(userEmail, authToken);
+            
+            if (currentUser == null) {
+                log.warn("User not found for email: {}. User may not be synchronized with user-service.", userEmail);
+                throw new AccessDeniedException("Access denied: User not found in user-service. Please synchronize your profile.");
+            }
+            
+            Long currentUserId = currentUser.getId();
+            
+            if (currentUserId == null) {
+                log.warn("User ID not found for email: {}. User may not be synchronized with user-service.", userEmail);
+                throw new AccessDeniedException("Access denied: User not found in user-service. Please synchronize your profile.");
+            }
+            
+            // Получаем userId владельца заказа
+            Long orderOwnerId = order.getUserId();
+            if (orderOwnerId == null) {
+                log.warn("Order {} has no userId, cannot verify ownership", id);
+                throw new AccessDeniedException("Access denied: Cannot verify order ownership");
+            }
+            
+            // Проверяем, что текущий пользователь является владельцем заказа (сравниваем userId)
+            if (!currentUserId.equals(orderOwnerId)) {
+                log.warn("User {} (userId: {}) attempted to delete order {} owned by userId: {}", 
+                    userEmail, currentUserId, id, orderOwnerId);
+                throw new AccessDeniedException("Access denied: You can only delete your own orders");
+            }
+            
+            // Проверяем, что заказ в статусе NEW (новый заказ без платежей)
+            if (order.getStatus() != OrderStatus.NEW) {
+                log.warn("User {} (userId: {}) attempted to delete order {} with status {}, but only NEW orders can be deleted", 
+                    userEmail, currentUserId, id, order.getStatus());
+                throw new AccessDeniedException("Access denied: You can only delete new orders (without payments)");
+            }
+            
+            log.info("User {} (userId: {}) is deleting their own NEW order {}", userEmail, currentUserId, id);
+        } else {
+            log.info("ADMIN user {} is deleting order {}", authentication.getName(), id);
         }
 
         // Cascade удалит orderItems автоматически благодаря настройкам JPA
         orderRepository.delete(order);
-        log.info("Order {} successfully deleted by ADMIN user: {}", id, authentication.getName());
+        log.info("Order {} successfully deleted by user: {}", id, authentication.getName());
     }
 
    

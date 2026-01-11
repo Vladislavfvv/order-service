@@ -4,8 +4,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * Базовый класс для интеграционных тестов.
@@ -37,29 +39,48 @@ public abstract class BaseIntegrationTest {
     // Статические контейнеры — создаются один раз для всех тестов
     static PostgreSQLContainer<?> postgres;
     static GenericContainer<?> redis;
+    static KafkaContainer kafka;
 
     static {
         // Создаём и стартуем контейнеры только если USE_TESTCONTAINERS=true
         if (USE_TESTCONTAINERS) {
-            // Создаём контейнер PostgreSQL версии 16 для тестовой базы данных
-            // Контейнер будет использоваться для всех интеграционных тестов
-            postgres = new PostgreSQLContainer<>("postgres:16")
-                    .withDatabaseName("testdb") // Имя тестовой базы данных
-                    .withUsername("test") // Имя пользователя для подключения
-                    .withPassword("test") // Пароль для подключения
-                    .withStartupAttempts(3); // Количество попыток запуска контейнера
-            postgres.start(); // Запускаем контейнер PostgreSQL
+            try {
+                // Создаём контейнер PostgreSQL версии 16 для тестовой базы данных
+                // Контейнер будет использоваться для всех интеграционных тестов
+                postgres = new PostgreSQLContainer<>("postgres:16")
+                        .withDatabaseName("testdb") // Имя тестовой базы данных
+                        .withUsername("test") // Имя пользователя для подключения
+                        .withPassword("test") // Пароль для подключения
+                        .withStartupAttempts(3) // Количество попыток запуска контейнера
+                        .withStartupTimeout(java.time.Duration.ofSeconds(120)); // Таймаут запуска 120 секунд
+                postgres.start(); // Запускаем контейнер PostgreSQL
 
-            // Создаём контейнер Redis версии 7.2 для тестового кеша
-            // Redis используется для кеширования данных в приложении
-            redis = new GenericContainer<>("redis:7.2")
-                    .withExposedPorts(6379) // Открываем стандартный порт Redis
-                    .waitingFor(Wait.forListeningPort()); // Ждём, пока порт станет доступен
-            redis.start(); // Запускаем контейнер Redis
+                // Создаём контейнер Redis версии 7.2 для тестового кеша
+                // Redis используется для кеширования данных в приложении
+                redis = new GenericContainer<>("redis:7.2")
+                        .withExposedPorts(6379) // Открываем стандартный порт Redis
+                        .waitingFor(Wait.forListeningPort().withStartupTimeout(java.time.Duration.ofSeconds(60))); // Ждём, пока порт станет доступен
+                redis.start(); // Запускаем контейнер Redis
+
+                // Создаём контейнер Kafka для тестов
+                // Kafka используется для отправки и получения событий
+                kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"))
+                        .withStartupTimeout(java.time.Duration.ofSeconds(120)); // Таймаут запуска 120 секунд
+                kafka.start(); // Запускаем контейнер Kafka
+                System.out.println("Kafka started at: " + kafka.getBootstrapServers());
+            } catch (Exception e) {
+                System.err.println("ОШИБКА: Не удалось запустить Testcontainers. Убедитесь, что Docker запущен!");
+                System.err.println("Ошибка: " + e.getMessage());
+                e.printStackTrace();
+                throw new RuntimeException("Testcontainers не может запуститься. Проверьте Docker.", e);
+            }
 
             // Закрываем контейнеры при завершении JVM
             // Это гарантирует, что контейнеры будут остановлены даже при аварийном завершении
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                if (kafka != null) {
+                    kafka.stop();
+                }
                 if (redis != null) {
                     redis.stop();
                 }
@@ -138,6 +159,15 @@ public abstract class BaseIntegrationTest {
             registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
             // Используем схему public по умолчанию
             registry.add("spring.jpa.properties.hibernate.default_schema", () -> "public");
+            
+            // Kafka Configuration для тестов - используем Kafka контейнер из Testcontainers
+            // Включаем автозапуск listeners, так как Kafka доступен
+            registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+            registry.add("spring.kafka.listener.auto-startup", () -> "true");
+            // Уменьшаем таймауты для быстрого завершения тестов
+            registry.add("spring.kafka.producer.properties.delivery.timeout.ms", () -> "30000");
+            registry.add("spring.kafka.producer.properties.request.timeout.ms", () -> "30000");
+            registry.add("spring.kafka.producer.properties.metadata.max.age.ms", () -> "30000");
 
             // Настройки пула соединений Hikari для тестов
             // Более короткий lifecycle для тестов, чтобы не было WARN на shutdown

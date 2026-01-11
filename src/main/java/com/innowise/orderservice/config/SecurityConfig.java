@@ -33,8 +33,8 @@ public class SecurityConfig {
      * Настраивает Security Filter Chain для работы с JWT токенами.
      * 
      * Правила доступа:
-     * - ADMIN: доступ ко всем эндпоинтам, включая удаление заказов
-     * - USER: доступ только к своим ресурсам (проверка в контроллерах), НЕ может удалять заказы
+     * - ADMIN: доступ ко всем эндпоинтам, включая удаление любых заказов
+     * - USER: доступ только к своим ресурсам (проверка в контроллерах), может удалять только свои новые заказы (NEW)
      * - Публичные эндпоинты: /actuator/health, /actuator/info
      */
     @Bean
@@ -77,8 +77,9 @@ public class SecurityConfig {
                         // Проверка доступа выполняется в OrderService
                         .requestMatchers(HttpMethod.PUT, "/api/v1/orders/**").hasAnyRole("ADMIN", "USER")
                         
-                        // Эндпоинт для удаления заказов - только ADMIN(USER не может удалять заказы - получит 403 Forbidden)
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/orders/**").hasRole("ADMIN")
+                        // Эндпоинт для удаления заказов - USER может удалять только свои новые заказы (NEW), ADMIN - любые
+                        // Проверка доступа (владелец и статус) выполняется в OrderService
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/orders/**").hasAnyRole("ADMIN", "USER")
                         
                         .anyRequest().authenticated()
                 )
