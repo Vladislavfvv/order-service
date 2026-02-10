@@ -8,14 +8,40 @@ mvn clean package
 Пересобрать Docker образ:
 docker-compose up -d --build
 
+
+mvn clean package -DskipTests
+
 Собрать образ в Minikube Docker daemon:
-cd ..\order-service\order-service; docker build -t order-service:latest .
+cd ..\order-service\order-service; 
+docker build -t order-service:latest .
+
+загрузить образ в minikube
+minikube image load order-service:latest
+
+Перезапускаю поды order-service, чтобы применить новый образ:
+kubectl delete pods -l app=order-service
 
 Перезапуск deployment в Kubernetes
 kubectl rollout restart deployment/order-service -n microservices
 
 Перезапуск подов
 kubectl get pods -n microservices -l app=order-service
+
+Проверяю все поды в кластере:
+kubectl get pods --all-namespaces | Select-String "order"
+
+Проверяю, какие поды order-service работают:
+kubectl get pods | Select-String "order"
+
+Удаляю поды в namespace microservices:
+kubectl delete pods -n microservices -l app=order-service
+
+Поды перезапущены. Проверяю их статус:
+kubectl get pods -n microservices | Select-String "order-service"
+
+Поды запускаются. Ожидаю их готовности и проверяю логи:
+Start-Sleep -Seconds 15; kubectl get pods -n microservices | Select-String "order-service"
+
 
 Логи
 kubectl logs -n microservices -l app=order-service --tail=50

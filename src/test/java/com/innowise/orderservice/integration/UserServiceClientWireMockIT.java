@@ -1,5 +1,6 @@
 package com.innowise.orderservice.integration;
 
+import com.github.tomakehurst.wiremock.junit5.*;
 import com.innowise.orderservice.client.UserServiceClient;
 import com.innowise.orderservice.dto.UserDto;
 import org.junit.jupiter.api.DisplayName;
@@ -24,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * OrderService -> UserServiceClient (WebClient) -> WireMock (эмулирует user-service)
  */
 // Используем JUnit5-расширение WireMock 3 (jetty12) для подъёма mock-сервера на 9999 порту
-@com.github.tomakehurst.wiremock.junit5.WireMockTest(httpPort = 9999)
+@WireMockTest(httpPort = 9999)
 class UserServiceClientWireMockIT extends BaseIntegrationTest {
 
     @Autowired
