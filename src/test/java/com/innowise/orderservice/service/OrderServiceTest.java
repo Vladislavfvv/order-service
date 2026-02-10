@@ -33,11 +33,13 @@ import com.innowise.orderservice.exception.OrderNotFoundException;
 import com.innowise.orderservice.mapper.OrderItemMapper;
 import com.innowise.orderservice.mapper.OrderMapper;
 import com.innowise.orderservice.model.Item;
+import com.innowise.orderservice.producer.OrderEventProducer;
 import com.innowise.orderservice.model.Order;
 import com.innowise.orderservice.model.OrderItem;
 import com.innowise.orderservice.model.OrderStatus;
 import com.innowise.orderservice.repository.ItemRepository;
 import com.innowise.orderservice.repository.OrderRepository;
+import com.innowise.orderservice.service.OrderService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -45,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -69,6 +72,9 @@ class OrderServiceTest {
 
     @Mock
     private OrderMapper orderMapper;
+
+    @Mock
+    private OrderEventProducer orderEventProducer;
 
     private Order order;
     private UserDto user;
@@ -211,6 +217,8 @@ class OrderServiceTest {
         when(orderRepository.save(any(Order.class))).thenReturn(savedOrder);
         // Мокируем преобразование Order в OrderDto
         when(orderMapper.toDto(any(Order.class))).thenReturn(orderDto);
+        // Мокируем OrderEventProducer (Kafka producer)
+        doNothing().when(orderEventProducer).sendCreateOrderEvent(any(Order.class));
         
         // Выполняем тестируемый метод
         OrderWithUserDto result = orderService.createOrder(request, authentication);
@@ -327,8 +335,8 @@ class OrderServiceTest {
         orderDto.setItemDtoList(orderItemDtos);
 
         //when - Настройка моков и выполнение метода
-        // Мокируем repository - возвращаем order
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        // Мокируем repository - возвращаем order с товарами (используем findByIdWithItems, как в реальном коде)
+        when(orderRepository.findByIdWithItems(orderId)).thenReturn(Optional.of(order));
 
         // Мокируем mapper - возвращаем orderDto
         when(orderMapper.toDto(order)).thenReturn(orderDto); 
@@ -392,7 +400,7 @@ class OrderServiceTest {
         JwtAuthenticationToken authentication = createMockAuthentication(userEmail, "USER");
 
         //when - Настройка моков
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdWithItems(orderId)).thenReturn(Optional.of(order));
         when(userServiceClient.getUserById(orderOwner.getId(), authToken)).thenReturn(orderOwner);
 
         // Мокируем SecurityUtils для проверки доступа
@@ -414,7 +422,7 @@ class OrderServiceTest {
             });
 
             // Проверяем, что поиск заказа был выполнен
-            verify(orderRepository, times(1)).findById(orderId);
+            verify(orderRepository, times(1)).findByIdWithItems(orderId);
         }
     }
 
@@ -450,7 +458,7 @@ class OrderServiceTest {
         orderDto.setItemDtoList(new ArrayList<>());
 
         //when - Настройка моков и выполнение метода
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdWithItems(orderId)).thenReturn(Optional.of(order));
         when(orderMapper.toDto(order)).thenReturn(orderDto);
         when(userServiceClient.getUserById(orderOwner.getId(), authToken)).thenReturn(orderOwner);
         when(userServiceClient.getUserByEmail(orderOwnerEmail, authToken)).thenReturn(orderOwner);
@@ -497,7 +505,7 @@ class OrderServiceTest {
         
         // Мокируем ситуацию, когда заказ не найден (пустой Optional)
         // Это имитирует ситуацию, когда order с таким ID не существует в базе данных
-        when(orderRepository.findById(orderId)).thenReturn(Optional.empty()); 
+        when(orderRepository.findByIdWithItems(orderId)).thenReturn(Optional.empty()); 
 
         // when & then - Проверка, что метод выбросит исключение
         OrderNotFoundException exception = assertThrows(
@@ -507,8 +515,8 @@ class OrderServiceTest {
 
         // Проверка: что текст сообщения исключения соответствует ожидаемому
         assertEquals(expectedMessage, exception.getMessage()); 
-        // Проверка: что метод findById был вызван ровно 1 раз с нужным аргументом
-        verify(orderRepository, times(1)).findById(orderId); 
+        // Проверка: что метод findByIdWithItems был вызван ровно 1 раз с нужным аргументом
+        verify(orderRepository, times(1)).findByIdWithItems(orderId); 
     }
 
     /**
@@ -554,7 +562,8 @@ class OrderServiceTest {
         orderDto2.setStatus(OrderStatus.PROCESSING);
         
         // when - Настройка моков и выполнение метода
-        when(orderRepository.findAllByIdIn(orderIds)).thenReturn(orders);
+        // Используем новый метод с загрузкой items
+        when(orderRepository.findAllByIdInWithItems(orderIds)).thenReturn(orders);
         when(userServiceClient.getUserById(testUser.getId(), authToken)).thenReturn(testUser);
         when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser);
         when(orderMapper.toDto(order)).thenReturn(orderDto1);
@@ -578,7 +587,7 @@ class OrderServiceTest {
             assertEquals(2, result.size());
             assertEquals(1L, result.get(0).getOrder().getId());
             assertEquals(2L, result.get(1).getOrder().getId());
-            verify(orderRepository, times(1)).findAllByIdIn(orderIds);
+            verify(orderRepository, times(1)).findAllByIdInWithItems(orderIds);
         }
     }
 
@@ -625,7 +634,8 @@ class OrderServiceTest {
         orderDto2.setStatus(OrderStatus.PROCESSING);
         
         // when - Настройка моков и выполнение метода
-        when(orderRepository.findAllByStatusIn(statuses)).thenReturn(orders);
+        // Используем новый метод с загрузкой items
+        when(orderRepository.findAllByStatusInWithItems(statuses)).thenReturn(orders);
         when(userServiceClient.getUserById(testUser.getId(), authToken)).thenReturn(testUser);
         when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser);
         when(orderMapper.toDto(order)).thenReturn(orderDto1);
@@ -649,7 +659,7 @@ class OrderServiceTest {
             assertEquals(2, result.size());
             assertTrue(result.stream().anyMatch(o -> o.getOrder().getStatus() == OrderStatus.NEW));
             assertTrue(result.stream().anyMatch(o -> o.getOrder().getStatus() == OrderStatus.PROCESSING));
-            verify(orderRepository, times(1)).findAllByStatusIn(statuses);
+            verify(orderRepository, times(1)).findAllByStatusInWithItems(statuses);
         }
     }
 
@@ -688,7 +698,8 @@ class OrderServiceTest {
         orderDto2.setUserId(testUser.getId());
         orderDto2.setStatus(OrderStatus.PROCESSING);
 
-        when(orderRepository.findAll()).thenReturn(orders);
+        // Используем новый метод с загрузкой items
+        when(orderRepository.findAllWithItems()).thenReturn(orders);
         when(userServiceClient.getUserById(testUser.getId(), authToken)).thenReturn(testUser);
         when(userServiceClient.getUserByEmail(testUser.getEmail(), authToken)).thenReturn(testUser);
         when(orderMapper.toDto(order)).thenReturn(orderDto1);
@@ -702,7 +713,7 @@ class OrderServiceTest {
         assertEquals(2, result.size());
         assertEquals(1L, result.get(0).getOrder().getId());
         assertEquals(2L, result.get(1).getOrder().getId());
-        verify(orderRepository, times(1)).findAll();
+        verify(orderRepository, times(1)).findAllWithItems();
     }
 
     /**
@@ -745,12 +756,14 @@ class OrderServiceTest {
         UserDto testUser = new UserDto(1L, "Test", "User", 
                 LocalDate.of(2000, 1, 1), userEmail);
         
-        // Ожидаемый обновленный заказ
+        // Ожидаемый обновленный заказ (с items для корректного тестирования)
         Order updatedOrder = new Order();
         updatedOrder.setId(orderId);
         updatedOrder.setUserId(testUser.getId());
         updatedOrder.setStatus(OrderStatus.PROCESSING);
         updatedOrder.setCreation_date(LocalDateTime.now());
+        // Важно: добавляем items в updatedOrder, чтобы второй вызов findByIdWithItems вернул заказ с товарами
+        updatedOrder.setItems(order.getItems());
         
         // Ожидаемый DTO обновленного заказа
         OrderDto updatedOrderDto = new OrderDto();
@@ -759,7 +772,10 @@ class OrderServiceTest {
         updatedOrderDto.setStatus(OrderStatus.PROCESSING);
         
         // when - Настройка моков и выполнение метода
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        // Мокируем findByIdWithItems для начальной загрузки заказа и повторной загрузки после сохранения
+        when(orderRepository.findByIdWithItems(orderId))
+                .thenReturn(Optional.of(order))  // Первый вызов - для начальной загрузки
+                .thenReturn(Optional.of(updatedOrder));  // Второй вызов - после сохранения (с items)
         when(orderRepository.save(any(Order.class))).thenReturn(updatedOrder);
         when(userServiceClient.getUserById(testUser.getId(), authToken)).thenReturn(testUser);
         when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser);
@@ -775,7 +791,7 @@ class OrderServiceTest {
         // Проверяем, что статус заказа был обновлен
         assertEquals(OrderStatus.PROCESSING, result.getOrder().getStatus());
         // Проверяем, что методы были вызваны нужное количество раз
-        verify(orderRepository, times(1)).findById(orderId);
+        verify(orderRepository, times(2)).findByIdWithItems(orderId); // Один раз для загрузки, второй после сохранения
         verify(orderRepository, times(1)).save(any(Order.class));
     }
 
@@ -811,7 +827,7 @@ class OrderServiceTest {
         request.setStatus(OrderStatus.PROCESSING);
         
         // when - Мокируем ситуацию, когда заказ не найден
-        when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
+        when(orderRepository.findByIdWithItems(orderId)).thenReturn(Optional.empty());
         
         // then - Проверка, что выбрасывается исключение
         assertThrows(OrderNotFoundException.class, () -> {
@@ -819,7 +835,7 @@ class OrderServiceTest {
         });
         
         // Проверяем, что поиск заказа был выполнен
-        verify(orderRepository, times(1)).findById(orderId);
+        verify(orderRepository, times(1)).findByIdWithItems(orderId);
         // Проверяем, что заказ НЕ был сохранен из-за ошибки
         verify(orderRepository, never()).save(any(Order.class));
     }
@@ -954,7 +970,8 @@ class OrderServiceTest {
         
         // when - Настройка моков и выполнение метода
         when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser);
-        when(orderRepository.findAllByUserId(testUser.getId())).thenReturn(userOrders);
+        // Используем новый метод с загрузкой items
+        when(orderRepository.findAllByUserIdWithItems(testUser.getId())).thenReturn(userOrders);
         when(orderMapper.toDto(order)).thenReturn(orderDto1);
         when(orderMapper.toDto(order2)).thenReturn(orderDto2);
         
@@ -981,7 +998,7 @@ class OrderServiceTest {
             
             // Проверяем, что методы были вызваны нужное количество раз
             verify(userServiceClient, times(1)).getUserByEmail(userEmail, authToken);
-            verify(orderRepository, times(1)).findAllByUserId(testUser.getId());
+            verify(orderRepository, times(1)).findAllByUserIdWithItems(testUser.getId());
         }
     }
 
@@ -1006,7 +1023,8 @@ class OrderServiceTest {
         
         // when - Настройка моков и выполнение метода
         when(userServiceClient.getUserByEmail(userEmail, authToken)).thenReturn(testUser);
-        when(orderRepository.findAllByUserId(testUser.getId())).thenReturn(List.of());
+        // Используем новый метод с загрузкой items
+        when(orderRepository.findAllByUserIdWithItems(testUser.getId())).thenReturn(List.of());
         
         // Мокируем SecurityUtils
         try (org.mockito.MockedStatic<com.innowise.orderservice.util.SecurityUtils> mockedSecurityUtils = 
@@ -1027,7 +1045,7 @@ class OrderServiceTest {
             
             // Проверяем, что методы были вызваны нужное количество раз
             verify(userServiceClient, times(1)).getUserByEmail(userEmail, authToken);
-            verify(orderRepository, times(1)).findAllByUserId(testUser.getId());
+            verify(orderRepository, times(1)).findAllByUserIdWithItems(testUser.getId());
         }
     }
 

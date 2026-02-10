@@ -3,13 +3,18 @@ package com.innowise.orderservice.integration;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.*;
 
+import com.innowise.orderservice.security.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.*;
+import org.springframework.context.annotation.*;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.*;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -48,8 +53,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * SecurityConfig не загружается благодаря @Profile("!test").
  */
 @AutoConfigureMockMvc
-@org.springframework.boot.test.context.SpringBootTest
-@org.springframework.context.annotation.Import(com.innowise.orderservice.security.TestSecurityConfig.class) // Используем TestSecurityConfig для упрощения тестов
+@SpringBootTest
+@Import(TestSecurityConfig.class) // Используем TestSecurityConfig для упрощения тестов
 class OrderControllerIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
@@ -64,7 +69,7 @@ class OrderControllerIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    @MockitoBean
     private UserServiceClient userServiceClient;
 
     // JwtDecoder настроен через @Primary бин в BaseIntegrationTest.TestJwtDecoderConfig
@@ -129,7 +134,7 @@ class OrderControllerIntegrationTest extends BaseIntegrationTest {
         orderItemDto.setQuantity(BigDecimal.valueOf(2));
 
         CreateOrderRequest request = new CreateOrderRequest();
-        request.setItems(java.util.List.of(orderItemDto));
+        request.setItems(List.of(orderItemDto));
 
         // when & then - Выполнение HTTP запроса и проверка результатов
         mockMvc.perform(post("/api/v1/orders")
@@ -280,19 +285,27 @@ class OrderControllerIntegrationTest extends BaseIntegrationTest {
     /**
      * Интеграционный тест проверки прав доступа при удалении заказа обычным пользователем.
      */
-    @DisplayName("deleteOrder_Forbidden_User - Обычный пользователь не может удалять заказы")
+    @DisplayName("deleteOrder_Forbidden_User - Обычный пользователь не может удалять чужие заказы")
     @Test
     void deleteOrder_Forbidden_User() throws Exception {
-        // given - Используем существующий заказ из setUp
+        // given - Создаем заказ, принадлежащий другому пользователю
+        UserDto otherUser = new UserDto(2L, "Other", "User", LocalDate.of(1990, 5, 15), "other@example.com");
+        when(userServiceClient.getUserByEmail(eq("other@example.com"), any())).thenReturn(otherUser);
+        
+        Order otherUserOrder = new Order();
+        otherUserOrder.setUserId(otherUser.getId()); // Заказ принадлежит другому пользователю
+        otherUserOrder.setStatus(OrderStatus.NEW);
+        otherUserOrder.setCreation_date(LocalDateTime.now());
+        otherUserOrder = orderRepository.save(otherUserOrder);
 
-        // when & then - Выполнение HTTP запроса и проверка ошибки доступа
-        mockMvc.perform(delete("/api/v1/orders/{id}", testOrder.getId())
+        // when & then - Пытаемся удалить чужой заказ от имени test@example.com
+        mockMvc.perform(delete("/api/v1/orders/{id}", otherUserOrder.getId())
                         .with(jwt().jwt(jwt -> jwt.subject("test@example.com"))
                                 .authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden()); // Проверяем HTTP статус 403
 
         // Проверяем, что заказ НЕ был удален из БД
-        assertTrue(orderRepository.findById(testOrder.getId()).isPresent()); //Проверяем, что заказ есть в БД
+        assertTrue(orderRepository.findById(otherUserOrder.getId()).isPresent()); // Проверяем, что заказ есть в БД
     }
 
     /**
