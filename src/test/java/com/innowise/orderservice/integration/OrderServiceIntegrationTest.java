@@ -31,6 +31,7 @@ import com.innowise.orderservice.model.OrderStatus;
 import com.innowise.orderservice.repository.ItemRepository;
 import com.innowise.orderservice.repository.OrderRepository;
 import com.innowise.orderservice.service.OrderService;
+import org.springframework.transaction.annotation.*;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -52,7 +53,7 @@ import static org.mockito.Mockito.when;
  * ВАЖНО: Используем @Transactional для обеспечения доступа к ленивым коллекциям Hibernate
  * в рамках активной сессии.
  */
-@org.springframework.transaction.annotation.Transactional
+@Transactional
 class OrderServiceIntegrationTest extends BaseIntegrationTest {
 
     @Autowired

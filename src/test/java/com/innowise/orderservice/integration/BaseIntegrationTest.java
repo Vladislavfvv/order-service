@@ -1,8 +1,7 @@
 package com.innowise.orderservice.integration;
 
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.*;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -22,7 +21,7 @@ import org.testcontainers.utility.DockerImageName;
  */
 @SpringBootTest(properties = {
         "spring.cache.type=none"}) // Отключаем кеширование для интеграционных тестов
-@org.springframework.test.context.ActiveProfiles("test") // Активируем профиль "test" для исключения SecurityConfig
+@ActiveProfiles("test") // Активируем профиль "test" для исключения SecurityConfig
 // Примечание: application-test.properties НЕ используется, так как все настройки задаются через @DynamicPropertySource
 // Примечание: НЕ используем @Transactional здесь, так как это может конфликтовать с MockMvc в контроллер-тестах
 public abstract class BaseIntegrationTest {
@@ -110,31 +109,7 @@ public abstract class BaseIntegrationTest {
      * Настраивает динамические свойства для подключения к тестовой БД.
      * Используется вместо application.properties для интеграционных тестов.
      */
-//    @DynamicPropertySource //Аннотация для настройки динамических свойств для подключения к тестовой БД
-//    static void configureProperties(DynamicPropertyRegistry registry) {
-//        // Настройки подключения к PostgreSQL контейнеру
-//        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-//        registry.add("spring.datasource.username", postgres::getUsername);
-//        registry.add("spring.datasource.password", postgres::getPassword);
-//
-//        // Включаем Liquibase для применения миграций
-//        registry.add("spring.liquibase.enabled", () -> true);
-//        registry.add("spring.liquibase.change-log",
-//                () -> "classpath:/db/changelog/db.changelog-master.yaml");
-//
-//        // Отключаем Redis для тестов
-//        registry.add("spring.data.redis.repositories.enabled", () -> false);
-//
-//        // Настройки JWT для тестов
-//        registry.add("jwt.secret", () -> "test-secret-key-for-jwt-generation-in-order-service-integration-tests");
-//
-//        // Мок URL для User Service (будет замокирован через @MockBean)
-//        registry.add("user.service.url", () -> "http://localhost:9999");
-//
-//        // Упрощенные настройки Circuit Breaker для тестов
-//        registry.add("resilience4j.circuitbreaker.instances.userService.slidingWindowSize", () -> 5);
-//        registry.add("resilience4j.circuitbreaker.instances.userService.minimumNumberOfCalls", () -> 2);
-//    }
+
 
     /**
      * Настраивает свойства для интеграционных тестов.
